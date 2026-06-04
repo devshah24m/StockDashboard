@@ -2365,7 +2365,12 @@ function getSheet(name, headers) {
 }
 
 function getAll() {
-  return { dealers: getSheetData('Dealers'), admin: getSheetData('Admin'), subs: getSheetData('Submissions') };
+  return {
+    dealers: getSheetData('Dealers'),
+    admin: getSheetData('Admin'),
+    subs: getSheetData('Submissions'),
+    checklists: getChecklists().checklists
+  };
 }
 
 function getSheetData(name) {
@@ -2586,16 +2591,12 @@ async function initApp() {
   try {
     const all = await gasGet('getAll');
 
-    // Load checklists from Sheets (overrides hardcoded defaults if saved data exists)
-    try {
-      const clData = await gasGet('getChecklists');
-      if (clData && clData.checklists && clData.checklists.length > 0) {
-        // Merge: keep section names from defaults, replace items from Sheets
-        clData.checklists.forEach((sec, i) => {
-          if (CHECKLISTS[i]) CHECKLISTS[i].items = sec.items;
-        });
-      }
-    } catch(e) { console.warn('[GAS] Could not load checklists:', e); }
+    // Load checklists from Sheets (comes bundled in getAll — no extra round-trip)
+    if (all.checklists && all.checklists.length > 0) {
+      all.checklists.forEach((sec, i) => {
+        if (CHECKLISTS[i]) CHECKLISTS[i].items = sec.items;
+      });
+    }
 
     // Rebuild dealer registry
     dealerRegistry = {};
@@ -2742,7 +2743,7 @@ function populateDealerSelect() {
   });
 }
 
-function dealerLogin() {
+async function dealerLogin() {
   const sel  = document.getElementById('dealerSelect').value;
   const pass = document.getElementById('dealerPass').value;
   if (!sel)  { alert('Please select your dealer ID.'); return; }
@@ -2760,6 +2761,18 @@ function dealerLogin() {
   document.getElementById('greeting').textContent       = greet();
   document.getElementById('dealerSub').textContent      = `Fill in your assigned checklist sections for ${today()}.`;
   document.getElementById('currentDate').textContent    = today();
+
+  // Always re-fetch latest checklists from Sheets before rendering
+  // (handles case where admin updated tasks after this session started)
+  try {
+    const clData = await gasGet('getChecklists');
+    if (clData && clData.checklists && clData.checklists.length > 0) {
+      clData.checklists.forEach((sec, i) => {
+        if (CHECKLISTS[i]) CHECKLISTS[i].items = sec.items;
+      });
+    }
+  } catch(e) { console.warn('[GAS] checklist refresh failed:', e); }
+
   renderChecklists();
   setView('dealerDash');
 }
