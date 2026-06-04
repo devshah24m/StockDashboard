@@ -1241,14 +1241,14 @@ with st.sidebar:
         ("All Corporate Actions", "🏦 All Corporate Actions"),
     ]
 
+    _cur_nav = st.session_state.get("nav_tab", "Portfolio")
+
     # ── Master Import (dev only) ──────────────────────────────
     if _is_dev:
         if st.button("📥 Master Import", key="nav_master_import", use_container_width=True,
                      type="primary" if _cur_nav == "Master Import" else "secondary"):
             st.session_state["nav_tab"] = "Master Import"
             st.rerun()
-
-    _cur_nav = st.session_state.get("nav_tab", "Portfolio")
     for _nav_key, _nav_label in _NAV_ITEMS:
         _is_active = (_cur_nav == _nav_key)
         _btn_style = """
