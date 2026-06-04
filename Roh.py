@@ -979,9 +979,13 @@ except Exception:
 import base64, urllib.request, urllib.error
 
 # ── Credentials from Streamlit secrets ───────────────────────────
-_GH_TOKEN  = st.secrets.get("GITHUB_TOKEN",  "")
-_GH_REPO   = st.secrets.get("GITHUB_REPO",   "devshah24m/stockdashboard")
-_GH_BRANCH = st.secrets.get("GITHUB_BRANCH", "main")
+# st.secrets doesn't support .get() on all Streamlit versions — use try/except
+try:    _GH_TOKEN  = st.secrets["GITHUB_TOKEN"]
+except: _GH_TOKEN  = ""
+try:    _GH_REPO   = st.secrets["GITHUB_REPO"]
+except: _GH_REPO   = "devshah24m/stockdashboard"
+try:    _GH_BRANCH = st.secrets["GITHUB_BRANCH"]
+except: _GH_BRANCH = "main"
 
 def _gh_api(path):
     return f"https://api.github.com/repos/{_GH_REPO}/contents/{path}"
@@ -1106,7 +1110,10 @@ def gh_sync_all_data_files():
         print(f"[GH] Could not list repo contents: {e}")
 
 # ── On every startup: pull ALL data files from GitHub to local disk ──
-gh_sync_all_data_files()
+# Use session_state flag so it runs once per session, not on every rerun
+if "gh_startup_sync_done" not in st.session_state:
+    gh_sync_all_data_files()
+    st.session_state["gh_startup_sync_done"] = True
 
 # =========================================================
 # CLIENT MANAGEMENT — Client Code login, no visible client list
