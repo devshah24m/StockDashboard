@@ -5,9 +5,8 @@ requests
 feedparser
 pyotp
 smartapi-python
+logzero
 
 # Optional dependencies (used with try/except fallback)
 yfinance
 streamlit-js-eval
-Smartconnect
-logzero
