@@ -10,3 +10,4 @@ logzero
 # Optional dependencies (used with try/except fallback)
 yfinance
 streamlit-js-eval
+websocket
