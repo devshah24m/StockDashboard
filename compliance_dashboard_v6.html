@@ -2339,6 +2339,8 @@ function _handle(action, payload) {
     else if (action === 'saveAdmin')          result = saveAdmin(payload.data);
     else if (action === 'saveSubmission')     result = saveSubmission(payload.data);
     else if (action === 'clearSubmissions')   result = clearSubmissions();
+    else if (action === 'saveChecklists')     result = saveChecklists(payload.data);
+    else if (action === 'getChecklists')      result = getChecklists();
     // Legacy: payload nested inside GET param
     else if (payload && payload.action) {
       if (payload.action === 'saveDealers')        result = saveDealers(payload.data);
@@ -2411,6 +2413,34 @@ function clearSubmissions() {
   const sh = SS.getSheetByName('Submissions');
   if (sh) { sh.clearContents(); sh.appendRow(['key','dealer','dealerName','section','sectionName','itemIdx','item','status','remarks','date','time']); }
   return { ok: true };
+}
+
+function saveChecklists(checklists) {
+  const sh = getSheet('Checklists', ['section_index','section_name','item_index','item_text']);
+  sh.clearContents();
+  sh.appendRow(['section_index','section_name','item_index','item_text']);
+  checklists.forEach((sec, si) => {
+    sec.items.forEach((item, idx) => {
+      sh.appendRow([si, sec.name, idx, item]);
+    });
+  });
+  return { ok: true };
+}
+
+function getChecklists() {
+  const sh = SS.getSheetByName('Checklists');
+  if (!sh) return { checklists: null };
+  const vals = sh.getDataRange().getValues();
+  if (vals.length <= 1) return { checklists: null };
+  const rows = vals.slice(1);
+  const sections = {};
+  rows.forEach(r => {
+    const si = r[0], name = r[1], item = r[3];
+    if (!sections[si]) sections[si] = { name: name, items: [] };
+    sections[si].items.push(item);
+  });
+  const result = Object.keys(sections).sort((a,b)=>a-b).map(k => sections[k]);
+  return { checklists: result };
 }
 `.trim();
 
@@ -2543,6 +2573,10 @@ async function saveDealers() {
   await gasPost({ action: 'saveDealers', data: arr });
 }
 
+async function saveChecklists() {
+  await gasPost({ action: 'saveChecklists', data: CHECKLISTS });
+}
+
 async function saveAdminCreds() {
   await gasPost({ action: 'saveAdmin', data: adminCreds });
 }
@@ -2551,6 +2585,17 @@ async function initApp() {
   showLoadingOverlay(true);
   try {
     const all = await gasGet('getAll');
+
+    // Load checklists from Sheets (overrides hardcoded defaults if saved data exists)
+    try {
+      const clData = await gasGet('getChecklists');
+      if (clData && clData.checklists && clData.checklists.length > 0) {
+        // Merge: keep section names from defaults, replace items from Sheets
+        clData.checklists.forEach((sec, i) => {
+          if (CHECKLISTS[i]) CHECKLISTS[i].items = sec.items;
+        });
+      }
+    } catch(e) { console.warn('[GAS] Could not load checklists:', e); }
 
     // Rebuild dealer registry
     dealerRegistry = {};
@@ -3936,9 +3981,14 @@ async function clSaveChanges() {
   if (typeof renderChecklists === 'function' && typeof currentDealer !== 'undefined' && currentDealer) {
     renderChecklists();
   }
-  // Persist dealer registry (itemPerms may have changed from clDeleteItem)
-  await saveDealers();
-  showToast('Checklist updated & saved!', 'success');
+  // Persist both checklists and dealer registry to Google Sheets
+  try {
+    await Promise.all([saveChecklists(), saveDealers()]);
+    showToast('Checklist saved to Google Sheets!', 'success');
+  } catch(e) {
+    showToast('Save failed — check GAS connection.', 'error');
+    console.error('[clSaveChanges]', e);
+  }
 }
 
 // Hook into admin panel switch to init the manager
