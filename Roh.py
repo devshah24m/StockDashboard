@@ -1241,6 +1241,13 @@ with st.sidebar:
         ("All Corporate Actions", "🏦 All Corporate Actions"),
     ]
 
+    # ── Master Import (dev only) ──────────────────────────────
+    if _is_dev:
+        if st.button("📥 Master Import", key="nav_master_import", use_container_width=True,
+                     type="primary" if _cur_nav == "Master Import" else "secondary"):
+            st.session_state["nav_tab"] = "Master Import"
+            st.rerun()
+
     _cur_nav = st.session_state.get("nav_tab", "Portfolio")
     for _nav_key, _nav_label in _NAV_ITEMS:
         _is_active = (_cur_nav == _nav_key)
@@ -5967,6 +5974,504 @@ with st.sidebar:
                     st.success("\u2705 Password updated!")
 
 # =========================================================
+
+# =========================================================
+# MASTER IMPORT — Asset Classes, P&L Logic, Template
+# =========================================================
+
+_MI_ASSET_CLASSES = [
+    "Equity", "F&O - Futures", "F&O - Options",
+    "Mutual Fund", "ETF", "SGBs (Gold Bonds)", "Currency", "Commodity",
+]
+_MI_SHORT_SUPPORTED = {"Equity", "F&O - Futures", "F&O - Options", "Currency", "Commodity"}
+_MI_REQUIRED_COLS   = ["Stock Name", "Asset Class", "Buy Price", "Buy Qty", "Buy Date"]
+_MI_OPTIONAL_COLS   = ["Sell Qty", "Sell Price", "Sell Date"]
+_MI_ALL_COLS        = _MI_REQUIRED_COLS + _MI_OPTIONAL_COLS
+
+
+def _mi_generate_template() -> bytes:
+    """Generate a styled 3-sheet Excel template for portfolio import."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Portfolio Trades"
+    header_fill  = PatternFill("solid", start_color="1E3A5F", end_color="1E3A5F")
+    header_font  = Font(bold=True, color="FFFFFF", name="Arial", size=11)
+    short_fill   = PatternFill("solid", start_color="3D0000", end_color="3D0000")
+    alt_fill     = PatternFill("solid", start_color="EEF2FF", end_color="EEF2FF")
+    white_fill   = PatternFill("solid", start_color="FFFFFF", end_color="FFFFFF")
+    border = Border(
+        left=Side(style="thin",color="2E4A6F"), right=Side(style="thin",color="2E4A6F"),
+        top=Side(style="thin",color="2E4A6F"),  bottom=Side(style="thin",color="2E4A6F"),
+    )
+    for col, h in enumerate(_MI_ALL_COLS, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.font = header_font; cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = border
+    sample_rows = [
+        ["RELIANCE",     "Equity",            2450.50,  10,  "01-01-2024", 5,   2600.00,  "15-03-2024"],
+        ["TCS",          "Equity",            3500.00,  5,   "10-02-2024", "",  "",       ""],
+        ["NIFTY25000CE", "F&O - Options",      120.00,  50,  "05-03-2024", 50,  180.00,   "20-03-2024"],
+        ["NIFTY25000CE", "F&O - Options",      150.00, -75,  "06-03-2024", -75,  90.00,   "21-03-2024"],
+        ["NIFTYFUT",     "F&O - Futures",    22000.00,  -1,  "10-03-2024", -1, 21500.00,  "25-03-2024"],
+        ["GOLDBEES",     "ETF",                 55.00,  100, "12-04-2024", "",  "",       ""],
+        ["SGB2028",      "SGBs (Gold Bonds)", 5800.00,  5,   "01-05-2024", "",  "",       ""],
+        ["USDINR",       "Currency",             83.00, -10, "02-05-2024", -10,  82.50,   "10-05-2024"],
+        ["CRUDEOIL",     "Commodity",          6500.00,  2,  "03-05-2024", "",  "",       ""],
+        ["HDFCNIFTY50",  "Mutual Fund",          180.00, 50, "15-05-2024", "",  "",       ""],
+    ]
+    for r_idx, row in enumerate(sample_rows, 2):
+        is_short = isinstance(row[3], (int, float)) and row[3] < 0
+        fill = short_fill if is_short else (alt_fill if r_idx % 2 == 0 else white_fill)
+        for c_idx, val in enumerate(row, 1):
+            cell = ws.cell(row=r_idx, column=c_idx, value=val)
+            cell.font = Font(name="Arial", size=10, color="FFB3B3" if is_short else "000000")
+            cell.fill = fill; cell.border = border
+            cell.alignment = Alignment(horizontal="center")
+    widths = [20, 20, 12, 12, 14, 10, 12, 14]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.row_dimensions[1].height = 28
+
+    notes = wb.create_sheet("Instructions")
+    notes["A1"] = "MASTER IMPORT TEMPLATE — INSTRUCTIONS"
+    notes["A1"].font = Font(bold=True, size=13, color="1E3A5F", name="Arial")
+    notes["A3"] = "Column"; notes["B3"] = "Description"
+    notes["A3"].font = Font(bold=True, name="Arial"); notes["B3"].font = Font(bold=True, name="Arial")
+    notes["A5"] = "SHORT SELL RULE"
+    notes["A5"].font = Font(bold=True, name="Arial", color="CC0000")
+    notes["B5"] = "Use NEGATIVE Buy Qty for short positions. P&L = (Entry Price − Cover Price) × |Qty|"
+    notes["B5"].font = Font(name="Arial", color="CC0000")
+    notes["A6"] = "LONG RULE"
+    notes["A6"].font = Font(bold=True, name="Arial", color="006600")
+    notes["B6"] = "P&L = (Sell Price − Buy Price) × Qty. Profit when price rises."
+    notes["B6"].font = Font(name="Arial", color="006600")
+    instr = [
+        ("Stock Name",  "NSE/BSE ticker or name. e.g. RELIANCE, NIFTY25000CE, GOLDBEES"),
+        ("Asset Class", "One of: " + ", ".join(_MI_ASSET_CLASSES)),
+        ("Buy Price",   "Entry price per unit. Always POSITIVE."),
+        ("Buy Qty",     "POSITIVE = Long/Buy. NEGATIVE = Short Sell / Option Writing."),
+        ("Buy Date",    "Entry date. Format: DD-MM-YYYY"),
+        ("Sell Qty",    "For long: positive exit qty. For short: negative exit qty."),
+        ("Sell Price",  "Exit/Cover price. Always POSITIVE."),
+        ("Sell Date",   "Exit date. Format: DD-MM-YYYY"),
+    ]
+    for i, (c, d) in enumerate(instr, 8):
+        notes.cell(row=i, column=1, value=c).font = Font(name="Arial", bold=True, color="1E3A5F")
+        notes.cell(row=i, column=2, value=d).font  = Font(name="Arial", size=10)
+    notes.column_dimensions["A"].width = 18
+    notes.column_dimensions["B"].width = 80
+
+    ref = wb.create_sheet("Asset Class Guide")
+    ref["A1"] = "Asset Class Reference"
+    ref["A1"].font = Font(bold=True, size=13, color="1E3A5F", name="Arial")
+    ref["A3"] = "Asset Class"; ref["B3"] = "Examples"; ref["C3"] = "Short Sell?"
+    for cell in [ref["A3"], ref["B3"], ref["C3"]]:
+        cell.font = Font(bold=True, name="Arial")
+    guide = [
+        ("Equity",            "RELIANCE, TCS, HDFCBANK",        "Yes"),
+        ("F&O - Futures",     "NIFTYFUT, BANKNIFTYFUT",          "Yes"),
+        ("F&O - Options",     "NIFTY25000CE, NIFTY24000PE",      "Yes (negative qty = option writing)"),
+        ("Mutual Fund",       "HDFCNIFTY50, PARAG FLEXI",        "No"),
+        ("ETF",               "GOLDBEES, NIFTYBEES",             "No"),
+        ("SGBs (Gold Bonds)", "SGB2028, SGB2030",                "No"),
+        ("Currency",          "USDINR, EURINR",                  "Yes"),
+        ("Commodity",         "CRUDEOIL, GOLD, SILVER",          "Yes"),
+    ]
+    for i, (ac, ex, sh) in enumerate(guide, 4):
+        ref.cell(row=i, column=1, value=ac).font  = Font(name="Arial", bold=True)
+        ref.cell(row=i, column=2, value=ex).font  = Font(name="Arial")
+        ref.cell(row=i, column=3, value=sh).font  = Font(name="Arial", color="006600" if "Yes" in sh else "CC0000")
+    ref.column_dimensions["A"].width = 22
+    ref.column_dimensions["B"].width = 35
+    ref.column_dimensions["C"].width = 35
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def _mi_calc_pnl(row):
+    bp, sp, bq, sq = row["Buy Price"], row["Sell Price"], row["Buy Qty"], row["Sell Qty"]
+    if pd.isna(sp) or pd.isna(sq) or pd.isna(bp):
+        return None, None
+    qty_abs = abs(sq)
+    pnl = (bp - sp) * qty_abs if bq < 0 else (sp - bp) * qty_abs
+    cost = bp * qty_abs
+    return round(pnl, 2), round((pnl / cost) * 100, 2) if cost else None
+
+
+def _mi_validate(df: pd.DataFrame):
+    errors = []
+    missing = [c for c in _MI_REQUIRED_COLS if c not in df.columns]
+    if missing:
+        errors.append(f"❌ Missing required columns: {', '.join(missing)}")
+        return df, errors
+    for c in _MI_OPTIONAL_COLS:
+        if c not in df.columns:
+            df[c] = None
+    df = df[_MI_ALL_COLS].copy()
+    df.dropna(how="all", inplace=True)
+    df.reset_index(drop=True, inplace=True)
+    for i, row in df.iterrows():
+        rn   = i + 2
+        name = str(row["Stock Name"]).strip() if pd.notna(row["Stock Name"]) else f"Row {rn}"
+        if pd.isna(row["Stock Name"]) or str(row["Stock Name"]).strip() == "":
+            errors.append(f"Row {rn}: Stock Name is empty.")
+        ac = str(row["Asset Class"]).strip() if pd.notna(row["Asset Class"]) else ""
+        if ac not in _MI_ASSET_CLASSES:
+            errors.append(f"Row {rn} ({name}): Asset Class '{ac}' invalid.")
+        try:
+            bp = float(row["Buy Price"])
+            if bp <= 0: errors.append(f"Row {rn} ({name}): Buy Price must be > 0.")
+        except: errors.append(f"Row {rn} ({name}): Buy Price is not a valid number.")
+        try:
+            bq = int(float(row["Buy Qty"]))
+            if bq == 0: errors.append(f"Row {rn} ({name}): Buy Qty cannot be 0.")
+            if bq < 0 and ac not in _MI_SHORT_SUPPORTED:
+                errors.append(f"Row {rn} ({name}): Short sell not supported for '{ac}'.")
+        except: errors.append(f"Row {rn} ({name}): Buy Qty is not a valid integer.")
+        if pd.isna(row["Buy Date"]) or str(row["Buy Date"]).strip() == "":
+            errors.append(f"Row {rn} ({name}): Buy Date is empty.")
+        sq, sp, sd = row["Sell Qty"], row["Sell Price"], row["Sell Date"]
+        has = [pd.notna(x) and str(x).strip() != "" for x in [sq, sp, sd]]
+        if any(has) and not all(has):
+            errors.append(f"Row {rn} ({name}): Sell Qty, Sell Price & Sell Date must all be filled or all empty.")
+        if all(has):
+            try:
+                bq = int(float(row["Buy Qty"])); sqv = int(float(sq))
+                if (bq < 0 and sqv > 0) or (bq > 0 and sqv < 0):
+                    errors.append(f"Row {rn} ({name}): Sell Qty sign must match Buy Qty sign.")
+                if abs(sqv) > abs(bq):
+                    errors.append(f"Row {rn} ({name}): |Sell Qty| cannot exceed |Buy Qty|.")
+            except: errors.append(f"Row {rn} ({name}): Sell Qty invalid.")
+    return df, errors
+
+
+def _mi_enrich(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["Buy Price"]  = pd.to_numeric(df["Buy Price"],  errors="coerce")
+    df["Buy Qty"]    = pd.to_numeric(df["Buy Qty"],    errors="coerce").astype("Int64")
+    df["Sell Qty"]   = pd.to_numeric(df["Sell Qty"],   errors="coerce")
+    df["Sell Price"] = pd.to_numeric(df["Sell Price"], errors="coerce")
+    df["Position"]   = df["Buy Qty"].apply(lambda q: "🔴 Short" if pd.notna(q) and q < 0 else "🟢 Long")
+    df["Capital (₹)"] = (df["Buy Price"] * df["Buy Qty"].abs()).round(2)
+    pnl = df.apply(_mi_calc_pnl, axis=1, result_type="expand")
+    df["P&L (₹)"] = pnl[0]; df["P&L %"] = pnl[1]
+    df["Status"]   = df["Sell Qty"].apply(lambda x: "✅ Closed" if pd.notna(x) else "🔵 Open")
+    return df
+
+
+def _mi_client_template() -> bytes:
+    """Generate client bulk-import Excel template."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Clients"
+    headers = ["Client ID", "Client Name", "Password"]
+    hf = PatternFill("solid", start_color="1E3A5F", end_color="1E3A5F")
+    hfont = Font(bold=True, color="FFFFFF", name="Arial", size=11)
+    border = Border(
+        left=Side(style="thin",color="2E4A6F"), right=Side(style="thin",color="2E4A6F"),
+        top=Side(style="thin",color="2E4A6F"),  bottom=Side(style="thin",color="2E4A6F"),
+    )
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.font = hfont; cell.fill = hf
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = border
+    sample = [
+        ["HO668", "Suresh Kumar",  "suresh@123"],
+        ["HO701", "Priya Sharma",  "priya@456"],
+        ["HO802", "Ramesh Gupta",  "ramesh@789"],
+        ["HO903", "Anita Reddy",   "anita@321"],
+    ]
+    alt_fill  = PatternFill("solid", start_color="EEF2FF", end_color="EEF2FF")
+    wht_fill  = PatternFill("solid", start_color="FFFFFF", end_color="FFFFFF")
+    for r_idx, row in enumerate(sample, 2):
+        fill = alt_fill if r_idx % 2 == 0 else wht_fill
+        for c_idx, val in enumerate(row, 1):
+            cell = ws.cell(row=r_idx, column=c_idx, value=val)
+            cell.font = Font(name="Arial", size=10)
+            cell.fill = fill; cell.border = border
+            cell.alignment = Alignment(horizontal="center")
+    for i, w in enumerate([18, 25, 20], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.row_dimensions[1].height = 28
+    notes = wb.create_sheet("Instructions")
+    notes["A1"] = "CLIENT IMPORT TEMPLATE — INSTRUCTIONS"
+    notes["A1"].font = Font(bold=True, size=13, color="1E3A5F", name="Arial")
+    instr = [
+        ("Client ID",   "Unique client code. e.g. HO668. Will be converted to UPPERCASE."),
+        ("Client Name", "Full display name. e.g. Suresh Kumar"),
+        ("Password",    "Initial login password. Client can change after login."),
+    ]
+    notes["A3"] = "Column"; notes["B3"] = "Description"
+    for cell in [notes["A3"], notes["B3"]]:
+        cell.font = Font(bold=True, name="Arial")
+    for i, (c, d) in enumerate(instr, 4):
+        notes.cell(row=i, column=1, value=c).font = Font(name="Arial", bold=True, color="1E3A5F")
+        notes.cell(row=i, column=2, value=d).font  = Font(name="Arial", size=10)
+    notes["A8"] = "⚠️ Note"
+    notes["A8"].font = Font(bold=True, name="Arial", color="CC0000")
+    notes["B8"] = "Duplicate Client IDs will be SKIPPED. Dev code cannot be used as Client ID."
+    notes["B8"].font = Font(name="Arial", color="CC0000")
+    notes.column_dimensions["A"].width = 16
+    notes.column_dimensions["B"].width = 70
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
+                            client_portfolio_file_fn, client_trades_file_fn,
+                            dev_code_ref):
+    """Full Master Import page: portfolio trades + client bulk import."""
+
+    st.markdown("""
+<div style="background:linear-gradient(135deg,#0f0f23,#1a1a3e);border:1px solid #2a2a5a;
+            border-radius:12px;padding:16px 24px;margin-bottom:18px;">
+  <div style="font-size:20px;font-weight:800;color:#f0f2ff;">📥 Master Import</div>
+  <div style="font-size:12px;color:#8888aa;margin-top:4px;">
+    Bulk import portfolio trades or add multiple clients in one go from Excel
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    tab_trades, tab_clients = st.tabs(["📈 Import Portfolio Trades", "👥 Import Clients"])
+
+    # ════════════════════════════════════════════════════
+    # TAB 1 — PORTFOLIO TRADES
+    # ════════════════════════════════════════════════════
+    with tab_trades:
+        st.markdown("#### 📋 Portfolio Trade Import")
+
+        with st.expander("📖 Short Sell & Options Logic", expanded=False):
+            st.markdown("""
+**🟢 Long Position** (positive Buy Qty)
+`P&L = (Sell Price − Buy Price) × Qty`
+*Buy 10 @ ₹100, Sell @ ₹120 → Profit ₹200*
+
+---
+**🔴 Short Sell / Option Writing** (negative Buy Qty)
+`P&L = (Entry Price − Cover Price) × |Qty|`
+*Short 10 @ ₹150, Cover @ ₹90 → Profit ₹600*
+*Short 10 @ ₹150, Cover @ ₹180 → Loss ₹300*
+
+---
+Short supported for: **Equity, F&O - Futures, F&O - Options, Currency, Commodity**
+Not supported for: **Mutual Fund, ETF, SGBs**
+""")
+
+        col_dl, _ = st.columns([1, 2])
+        with col_dl:
+            st.download_button(
+                "⬇️ Download Trade Template (.xlsx)",
+                data=_mi_generate_template(),
+                file_name="Portfolio_Master_Template.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="mi_dl_trade_template",
+            )
+
+        st.markdown("---")
+        uploaded = st.file_uploader("Upload filled Excel file", type=["xlsx","xls"], key="mi_trade_upload")
+        if uploaded is None:
+            st.info("👆 Upload your filled Excel file to preview and import.")
+            return
+
+        try:
+            raw_df = pd.read_excel(uploaded, dtype=str)
+            raw_df.columns = [str(c).strip() for c in raw_df.columns]
+        except Exception as e:
+            st.error(f"Could not read file: {e}")
+            return
+
+        cleaned_df, errors = _mi_validate(raw_df)
+        if errors:
+            st.error(f"**{len(errors)} issue(s) found — fix before importing:**")
+            for err in errors:
+                st.markdown(f"- {err}")
+            st.dataframe(raw_df, use_container_width=True, hide_index=True)
+            return
+
+        enriched_df = _mi_enrich(cleaned_df)
+        st.success(f"✅ {len(enriched_df)} valid trade(s) found. Preview:")
+
+        def _style_pnl(val):
+            try:
+                v = float(val)
+                return "color:#22d67b;font-weight:600" if v >= 0 else "color:#f85454;font-weight:600"
+            except: return ""
+        def _style_pos(val):
+            return "color:#f85454;font-weight:600" if "Short" in str(val) else "color:#22d67b;font-weight:600"
+
+        st.dataframe(
+            enriched_df.style.applymap(_style_pnl, subset=["P&L (₹)","P&L %"])
+                             .applymap(_style_pos, subset=["Position"]),
+            use_container_width=True, hide_index=True
+        )
+
+        c1,c2,c3,c4,c5 = st.columns(5)
+        c1.metric("Trades",          len(enriched_df))
+        c2.metric("Open",            (enriched_df["Status"]=="🔵 Open").sum())
+        c3.metric("Closed",          (enriched_df["Status"]=="✅ Closed").sum())
+        c4.metric("Short Positions", (enriched_df["Position"]=="🔴 Short").sum())
+        pnl_total = enriched_df["P&L (₹)"].sum(skipna=True)
+        c5.metric("Realised P&L", f"₹{pnl_total:,.2f}" if pd.notna(pnl_total) else "—")
+
+        ac_counts = enriched_df["Asset Class"].value_counts()
+        st.markdown("**Asset Class Breakdown:** " +
+                    "  |  ".join([f"`{k}`: {v}" for k, v in ac_counts.items()]))
+
+        st.markdown("---")
+        existing = st.session_state.get("portfolio_df", pd.DataFrame())
+        has_existing = len(existing) > 0
+
+        col_add, col_replace = st.columns(2)
+        with col_add:
+            lbl = "➕ Add to Existing Portfolio" if has_existing else "➕ Import as New Portfolio"
+            if st.button(lbl, use_container_width=True, type="primary", key="mi_add_btn"):
+                if has_existing:
+                    merged = pd.concat([existing, cleaned_df], ignore_index=True).drop_duplicates(
+                        subset=["Stock Name","Asset Class","Buy Date","Buy Price","Buy Qty"], keep="last"
+                    )
+                    st.session_state["portfolio_df"] = merged
+                    st.success(f"✅ Added {len(cleaned_df)} row(s). Portfolio now has {len(merged)} trade(s).")
+                else:
+                    st.session_state["portfolio_df"] = cleaned_df.copy()
+                    st.success(f"✅ Imported {len(cleaned_df)} trade(s).")
+        with col_replace:
+            if has_existing:
+                if st.button("🔄 Replace Existing Portfolio", use_container_width=True,
+                             type="secondary", key="mi_replace_btn"):
+                    st.session_state["portfolio_df"] = cleaned_df.copy()
+                    st.warning(f"⚠️ Portfolio replaced with {len(cleaned_df)} new trade(s). Previous {len(existing)} removed.")
+            else:
+                st.button("🔄 Replace Existing Portfolio", use_container_width=True,
+                          disabled=True, key="mi_replace_btn_dis")
+
+        if has_existing:
+            with st.expander(f"📋 Current Portfolio ({len(existing)} trades)", expanded=False):
+                st.dataframe(existing, use_container_width=True, hide_index=True)
+
+    # ════════════════════════════════════════════════════
+    # TAB 2 — CLIENT IMPORT
+    # ════════════════════════════════════════════════════
+    with tab_clients:
+        st.markdown("#### 👥 Bulk Client Import from Excel")
+        st.info("Upload an Excel file with Client ID, Client Name, and Password to add multiple clients at once.")
+
+        col_dl2, _ = st.columns([1, 2])
+        with col_dl2:
+            st.download_button(
+                "⬇️ Download Client Template (.xlsx)",
+                data=_mi_client_template(),
+                file_name="Client_Import_Template.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="mi_dl_client_template",
+            )
+
+        st.markdown("---")
+        cl_uploaded = st.file_uploader("Upload client Excel file", type=["xlsx","xls"], key="mi_client_upload")
+        if cl_uploaded is None:
+            st.info("👆 Upload your client Excel file to preview and import.")
+            return
+
+        try:
+            cl_raw = pd.read_excel(cl_uploaded, dtype=str)
+            cl_raw.columns = [str(c).strip() for c in cl_raw.columns]
+        except Exception as e:
+            st.error(f"Could not read file: {e}")
+            return
+
+        req = ["Client ID", "Client Name", "Password"]
+        missing_cl = [c for c in req if c not in cl_raw.columns]
+        if missing_cl:
+            st.error(f"Missing columns: {', '.join(missing_cl)}")
+            st.dataframe(cl_raw, use_container_width=True, hide_index=True)
+            return
+
+        cl_raw = cl_raw[req].dropna(how="all").reset_index(drop=True)
+
+        # Validate each row
+        cl_errors = []
+        cl_valid   = []
+        for i, row in cl_raw.iterrows():
+            rn  = i + 2
+            cid = str(row["Client ID"]).strip().upper() if pd.notna(row["Client ID"]) else ""
+            cnm = str(row["Client Name"]).strip() if pd.notna(row["Client Name"]) else ""
+            cpw = str(row["Password"]).strip() if pd.notna(row["Password"]) else ""
+            if not cid: cl_errors.append(f"Row {rn}: Client ID is empty.")
+            if not cnm: cl_errors.append(f"Row {rn}: Client Name is empty.")
+            if not cpw: cl_errors.append(f"Row {rn}: Password is empty.")
+            if cid == dev_code_ref.upper(): cl_errors.append(f"Row {rn}: '{cid}' is the developer code — cannot use.")
+            if cid and cnm and cpw and cid != dev_code_ref.upper():
+                cl_valid.append({"Client ID": cid, "Client Name": cnm, "Password": cpw})
+
+        if cl_errors:
+            st.warning(f"⚠️ {len(cl_errors)} issue(s) found (rows with errors will be skipped):")
+            for e in cl_errors: st.markdown(f"- {e}")
+
+        if not cl_valid:
+            st.error("No valid rows to import.")
+            return
+
+        preview_df = pd.DataFrame(cl_valid)
+        # Flag duplicates
+        preview_df["Status"] = preview_df["Client ID"].apply(
+            lambda x: "⚠️ Already exists" if x in clients_dict_ref else "🆕 New"
+        )
+        preview_df["Password Preview"] = preview_df["Password"].apply(lambda p: p[:2] + "***")
+        st.success(f"✅ {len(cl_valid)} valid client(s) found. Preview:")
+        st.dataframe(
+            preview_df[["Client ID","Client Name","Password Preview","Status"]],
+            use_container_width=True, hide_index=True
+        )
+
+        new_count  = (preview_df["Status"] == "🆕 New").sum()
+        skip_count = (preview_df["Status"] == "⚠️ Already exists").sum()
+        cc1, cc2 = st.columns(2)
+        cc1.metric("New Clients",       new_count)
+        cc2.metric("Already Exist (skip)", skip_count)
+
+        st.markdown("---")
+        ca1, ca2 = st.columns(2)
+        with ca1:
+            if st.button(f"➕ Import {new_count} New Client(s)", use_container_width=True,
+                         type="primary", key="mi_cl_import_btn", disabled=(new_count == 0)):
+                added = 0
+                for row in cl_valid:
+                    cid = row["Client ID"]
+                    if cid not in clients_dict_ref:
+                        clients_dict_ref[cid] = {
+                            "display_name":  row["Client Name"],
+                            "password_hash": hash_pw_fn(row["Password"]),
+                        }
+                        added += 1
+                save_clients_fn(clients_dict_ref)
+                st.success(f"✅ {added} new client(s) added successfully!")
+                st.rerun()
+
+        with ca2:
+            if st.button(f"🔄 Import & Overwrite All ({len(cl_valid)})", use_container_width=True,
+                         type="secondary", key="mi_cl_overwrite_btn"):
+                for row in cl_valid:
+                    cid = row["Client ID"]
+                    clients_dict_ref[cid] = {
+                        "display_name":  row["Client Name"],
+                        "password_hash": hash_pw_fn(row["Password"]),
+                    }
+                save_clients_fn(clients_dict_ref)
+                st.warning(f"⚠️ {len(cl_valid)} client(s) imported/updated (existing passwords overwritten).")
+                st.rerun()
+
+
 # MAIN DASHBOARD
 # =========================================================
 
@@ -14616,3 +15121,16 @@ if _nav_tab == "All Corporate Actions":
   </div>
 </div>
 """, unsafe_allow_html=True)
+
+# =========================================================
+# MASTER IMPORT TAB
+# =========================================================
+if _nav_tab == "Master Import" and _is_dev:
+    show_master_import_tab(
+        clients_dict_ref=clients_dict,
+        save_clients_fn=save_clients,
+        hash_pw_fn=hash_password,
+        client_portfolio_file_fn=client_portfolio_file,
+        client_trades_file_fn=client_trades_file,
+        dev_code_ref=DEV_CODE,
+    )
