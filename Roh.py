@@ -978,59 +978,58 @@ except Exception:
 
 import base64, urllib.request, urllib.error
 
-def _gh_token():
-    try:
-        return st.secrets["GITHUB_TOKEN"]
-    except Exception:
-        return None
-
-def _gh_repo():
-    try:
-        return st.secrets["GITHUB_REPO"]
-    except Exception:
-        return "devshah24m/stockdashboard"
-
-def _gh_branch():
-    try:
-        return st.secrets.get("GITHUB_BRANCH", "main")
-    except Exception:
-        return "main"
+# ── Credentials from Streamlit secrets ───────────────────────────
+_GH_TOKEN  = st.secrets.get("GITHUB_TOKEN",  "")
+_GH_REPO   = st.secrets.get("GITHUB_REPO",   "devshah24m/stockdashboard")
+_GH_BRANCH = st.secrets.get("GITHUB_BRANCH", "main")
 
 def _gh_api(path):
-    return f"https://api.github.com/repos/{_gh_repo()}/contents/{path}"
+    return f"https://api.github.com/repos/{_GH_REPO}/contents/{path}"
 
 def _gh_headers():
     return {
-        "Authorization": f"token {_gh_token()}",
+        "Authorization": f"token {_GH_TOKEN}",
         "Content-Type": "application/json",
         "User-Agent": "northeast-portfolio-app"
     }
+
+def gh_get_sha(path):
+    """Get the current SHA of a file on GitHub (needed for updates). Returns None if not found."""
+    try:
+        req = urllib.request.Request(
+            _gh_api(path) + f"?ref={_GH_BRANCH}",
+            headers=_gh_headers()
+        )
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read()).get("sha")
+    except Exception:
+        return None
 
 def gh_read_file(path):
     """Read a file from GitHub. Returns (content_str, sha) or (None, None)."""
     try:
         req = urllib.request.Request(
-            _gh_api(path) + f"?ref={_gh_branch()}",
+            _gh_api(path) + f"?ref={_GH_BRANCH}",
             headers=_gh_headers()
         )
         with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read())
             content = base64.b64decode(data["content"]).decode("utf-8")
-            return content, data["sha"]
+            return content, data.get("sha")
     except Exception:
         return None, None
 
 def gh_write_file(path, content_str, commit_msg=None):
-    """Write/overwrite a file on GitHub."""
-    if not _gh_token():
+    """Write/create/overwrite a file on GitHub. Returns True on success."""
+    if not _GH_TOKEN:
         return False
     try:
-        _, existing_sha = gh_read_file(path)
+        existing_sha = gh_get_sha(path)
         encoded = base64.b64encode(content_str.encode("utf-8")).decode()
         payload = {
             "message": commit_msg or f"Auto-save: {path}",
             "content": encoded,
-            "branch": _gh_branch()
+            "branch":  _GH_BRANCH,
         }
         if existing_sha:
             payload["sha"] = existing_sha
@@ -1039,16 +1038,45 @@ def gh_write_file(path, content_str, commit_msg=None):
             _gh_api(path), data=data, method="PUT", headers=_gh_headers()
         )
         with urllib.request.urlopen(req) as resp:
-            return resp.status in (200, 201)
-    except Exception:
+            result = json.loads(resp.read())
+            return "commit" in result
+    except urllib.error.HTTPError as e:
+        print(f"[GH] HTTP {e.code} writing {path}: {e.read().decode()[:200]}")
+        return False
+    except Exception as e:
+        print(f"[GH] Error writing {path}: {e}")
+        return False
+
+def _gh_sync_to_local(gh_path, local_path):
+    """Pull a file from GitHub → write to local disk. Returns True if pulled."""
+    content, _ = gh_read_file(gh_path)
+    if content:
+        try:
+            with open(local_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            return True
+        except Exception:
+            pass
+    return False
+
+def _local_sync_to_gh(local_path, gh_path, commit_msg=None):
+    """Read local file → push to GitHub. Returns True on success."""
+    if not os.path.exists(local_path):
+        return False
+    try:
+        with open(local_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return gh_write_file(gh_path, content, commit_msg)
+    except Exception as e:
+        print(f"[GH] Error syncing {local_path}: {e}")
         return False
 
 def gh_save_csv(df, path, commit_msg=None):
-    """Save a DataFrame as CSV to GitHub."""
+    """Save a DataFrame as CSV directly to GitHub."""
     return gh_write_file(path, df.to_csv(index=False), commit_msg)
 
 def gh_load_csv(path):
-    """Load a CSV from GitHub into a DataFrame."""
+    """Load a CSV from GitHub into a DataFrame. Returns None if not found."""
     content, _ = gh_read_file(path)
     if content:
         try:
@@ -1057,26 +1085,28 @@ def gh_load_csv(path):
             return None
     return None
 
-def _gh_sync_to_local(gh_path, local_path):
-    """Pull a file from GitHub and write it locally."""
-    content, _ = gh_read_file(gh_path)
-    if content:
-        with open(local_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        return True
-    return False
+def gh_sync_all_data_files():
+    """Pull ALL data files (clients + all portfolio/trades CSVs) from GitHub to local disk."""
+    import glob
+    # Always sync clients
+    _gh_sync_to_local("clients.json", "clients.json")
+    # Sync any portfolio/trades CSVs already in the repo
+    try:
+        req = urllib.request.Request(
+            f"https://api.github.com/repos/{_GH_REPO}/contents/?ref={_GH_BRANCH}",
+            headers=_gh_headers()
+        )
+        with urllib.request.urlopen(req) as resp:
+            files = json.loads(resp.read())
+        for f in files:
+            name = f.get("name", "")
+            if (name.startswith("portfolio_") or name.startswith("trades_")) and name.endswith(".csv"):
+                _gh_sync_to_local(name, name)
+    except Exception as e:
+        print(f"[GH] Could not list repo contents: {e}")
 
-def _local_sync_to_gh(local_path, gh_path, commit_msg=None):
-    """Push a local file up to GitHub."""
-    if not os.path.exists(local_path):
-        return False
-    with open(local_path, "r", encoding="utf-8") as f:
-        content = f.read()
-    return gh_write_file(gh_path, content, commit_msg)
-
-# ── On startup: pull all data files from GitHub to local disk ─────
-for _ghf in ["clients.json"]:
-    _gh_sync_to_local(_ghf, _ghf)
+# ── On every startup: pull ALL data files from GitHub to local disk ──
+gh_sync_all_data_files()
 
 # =========================================================
 # CLIENT MANAGEMENT — Client Code login, no visible client list
