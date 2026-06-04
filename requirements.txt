@@ -11,3 +11,4 @@ logzero
 yfinance
 streamlit-js-eval
 websocket
+openpyxl
