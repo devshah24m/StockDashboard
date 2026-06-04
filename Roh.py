@@ -1109,11 +1109,14 @@ def gh_sync_all_data_files():
     except Exception as e:
         print(f"[GH] Could not list repo contents: {e}")
 
-# ── On every startup: pull ALL data files from GitHub to local disk ──
-# Use session_state flag so it runs once per session, not on every rerun
-if "gh_startup_sync_done" not in st.session_state:
+# ── On every cold boot: pull ALL data files from GitHub to local disk ──
+# @st.cache_resource runs exactly once per Streamlit server process (i.e. once per cold boot)
+@st.cache_resource
+def _run_startup_gh_sync():
     gh_sync_all_data_files()
-    st.session_state["gh_startup_sync_done"] = True
+    return True
+
+_run_startup_gh_sync()
 
 # =========================================================
 # CLIENT MANAGEMENT — Client Code login, no visible client list
@@ -2725,8 +2728,8 @@ def compute_portfolio_beta(calc_df):
         weight = float(row["Value"]) / total_value if total_value else 0
         rows.append({"Ticker": row["Ticker"], "Beta": beta, "Weight": weight,
                      "Weighted_Beta": round(beta * weight, 4)})
-    beta_df = pd.DataFrame(rows)
-    portfolio_beta = round(beta_df["Weighted_Beta"].sum(), 3)
+    beta_df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["Ticker","Beta","Weight","Weighted_Beta"])
+    portfolio_beta = round(beta_df["Weighted_Beta"].sum(), 3) if not beta_df.empty else 0.0
     return portfolio_beta, beta_df
 
 
@@ -8041,9 +8044,16 @@ daily_pnl_pct   = (daily_pnl / daily_invested * 100) if daily_invested and daily
 total_booked_pnl = sum(booked_pnl_map.values()) if booked_pnl_map else 0.0
 
 # ── New metrics ───────────────────────────────────────────────────
-portfolio_beta, beta_df = compute_portfolio_beta(calc_listed)
-xirr_map = compute_xirr_per_holding(calc_listed, trades_df)
-alerts   = compute_alerts(calc_listed, total_value)
+# Guard all compute functions against empty portfolio
+if calc_listed.empty:
+    portfolio_beta = 0.0
+    beta_df        = pd.DataFrame(columns=["Ticker","Beta","Weight","Weighted_Beta"])
+    xirr_map       = {}
+    alerts         = []
+else:
+    portfolio_beta, beta_df = compute_portfolio_beta(calc_listed)
+    xirr_map = compute_xirr_per_holding(calc_listed, trades_df)
+    alerts   = compute_alerts(calc_listed, total_value)
 cap_gains_df = compute_capital_gains(trades_df, df)
 
 # Build summary dict (used by PDF / Excel / WhatsApp)
