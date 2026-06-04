@@ -6678,10 +6678,11 @@ def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
             trade_df = grp[trade_cols].copy()
 
             # Rename to match app's internal column names
+            # NOTE: Buy_Qty must be saved as "Shares" — that is the app's internal column name
             trade_df = trade_df.rename(columns={
                 "Stock Name":  "Ticker",
                 "Buy Price":   "Buy_Price",
-                "Buy Qty":     "Buy_Qty",
+                "Buy Qty":     "Shares",
                 "Buy Date":    "Buy_Date",
                 "Sell Qty":    "Sell_Qty",
                 "Sell Price":  "Sell_Price",
@@ -6695,7 +6696,7 @@ def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
                 # Merge / deduplicate
                 existing_pf = pd.read_csv(pf_path)
                 merged = pd.concat([existing_pf, trade_df], ignore_index=True).drop_duplicates(
-                    subset=["Ticker","Asset_Type","Buy_Date","Buy_Price","Buy_Qty"], keep="last"
+                    subset=["Ticker","Asset_Type","Buy_Date","Buy_Price","Shares"], keep="last"
                 )
                 merged.to_csv(pf_path, index=False)
                 _local_sync_to_gh(pf_path, pf_path, f"Import: portfolio for {cid}")
