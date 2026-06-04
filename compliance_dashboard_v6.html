@@ -1,0 +1,3939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NBS Compliance Hub — Daily Checklist System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+
+:root {
+  /* Core palette */
+  --ink:        #0A0B0F;
+  --ink2:       #12141A;
+  --ink3:       #1A1D26;
+  --ink4:       #242836;
+  --glass:      rgba(255,255,255,0.04);
+  --glass2:     rgba(255,255,255,0.07);
+  --glass3:     rgba(255,255,255,0.11);
+  --border:     rgba(255,255,255,0.08);
+  --border2:    rgba(255,255,255,0.14);
+  --text:       #F0F1F5;
+  --text2:      #8B8FA8;
+  --text3:      #525870;
+  --text4:      #363A4F;
+
+  /* Accent — electric blue */
+  --accent:     #3B7BFF;
+  --accent2:    #5B93FF;
+  --accent-glow: rgba(59,123,255,0.25);
+  --accent-dim: rgba(59,123,255,0.12);
+
+  /* Status */
+  --green:      #22C55E;
+  --green-dim:  rgba(34,197,94,0.12);
+  --amber:      #F59E0B;
+  --amber-dim:  rgba(245,158,11,0.12);
+  --red:        #EF4444;
+  --red-dim:    rgba(239,68,68,0.12);
+  --violet:     #A855F7;
+  --violet-dim: rgba(168,85,247,0.12);
+
+  /* Dealer colors */
+  --d1: #38BDF8; --d1-dim: rgba(56,189,248,0.12);
+  --d2: #34D399; --d2-dim: rgba(52,211,153,0.12);
+  --d3: #F472B6; --d3-dim: rgba(244,114,182,0.12);
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+  --sidebar-w: 240px;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--ink);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══════════════════════════════════════
+   PAST DATA / HISTORY PANEL
+═══════════════════════════════════════ */
+.history-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  background: var(--ink2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.history-ctrl-group { display: flex; flex-direction: column; gap: 4px; }
+
+.history-ctrl-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+.history-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.history-kpi {
+  background: var(--ink2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.history-kpi-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+.history-kpi-value {
+  font-family: 'Syne', sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: var(--text);
+}
+
+.history-kpi-sub {
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.hist-trend-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.hist-trend-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text2);
+  width: 110px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hist-trend-track {
+  flex: 1;
+  height: 8px;
+  background: var(--ink4);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.hist-trend-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width .4s ease;
+}
+
+.hist-trend-pct {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.hist-no-data {
+  padding: 3rem;
+  text-align: center;
+  color: var(--text3);
+  font-size: 13px;
+}
+
+
+.status-pill-green { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,197,94,0.35); border-radius: 20px; padding: 2px 8px; font-size: 10px; font-weight: 600; }
+.status-pill-amber { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(245,158,11,0.35); border-radius: 20px; padding: 2px 8px; font-size: 10px; font-weight: 600; }
+.status-pill-red   { background: var(--red-dim);   color: var(--red);   border: 1px solid rgba(239,68,68,0.35);  border-radius: 20px; padding: 2px 8px; font-size: 10px; font-weight: 600; }
+
+.view { display: none !important; }
+.view.active { display: block !important; }
+.flex-view { display: none !important; }
+.flex-view.active { display: flex !important; }
+
+/* ═══════════════════════════════════════
+   LOGIN SCREENS
+═══════════════════════════════════════ */
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ink);
+  position: relative;
+  overflow: hidden;
+}
+
+.login-screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 30%, rgba(59,123,255,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 40% at 80% 70%, rgba(168,85,247,0.07) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.login-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 100vh;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.login-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 4rem;
+  position: relative;
+}
+
+.login-left::after {
+  content: '';
+  position: absolute;
+  right: 0; top: 10%; bottom: 10%;
+  width: 1px;
+  background: linear-gradient(to bottom, transparent, var(--border2), transparent);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 3rem;
+}
+
+.brand-logo {
+  width: 44px; height: 44px;
+  background: var(--accent-dim);
+  border: 1px solid rgba(59,123,255,0.3);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.brand-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.brand-name span {
+  color: var(--text3);
+  font-weight: 400;
+}
+
+.login-headline {
+  font-family: 'Syne', sans-serif;
+  font-size: 38px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -1px;
+  margin-bottom: 1rem;
+}
+
+.login-headline em {
+  font-style: normal;
+  background: linear-gradient(135deg, var(--accent) 0%, #7C9FFF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.login-sub {
+  color: var(--text2);
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 320px;
+}
+
+.login-pills {
+  display: flex;
+  gap: 8px;
+  margin-top: 2.5rem;
+  flex-wrap: wrap;
+}
+
+.login-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.login-pill .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+}
+
+.login-right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+}
+
+.login-card-header {
+  margin-bottom: 2rem;
+}
+
+.login-card-header h2 {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  margin-bottom: 4px;
+}
+
+.login-card-header p {
+  color: var(--text2);
+  font-size: 13px;
+}
+
+.login-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 1.5rem;
+}
+
+.role-dealer { background: var(--accent-dim); color: var(--accent2); border: 1px solid rgba(59,123,255,0.25); }
+.role-admin  { background: var(--violet-dim); color: var(--violet);  border: 1px solid rgba(168,85,247,0.25); }
+
+.field { margin-bottom: 14px; }
+
+.field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text3);
+  margin-bottom: 6px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--glass);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+  -webkit-appearance: none;
+}
+
+.field input::placeholder { color: var(--text3); }
+
+.field input:focus,
+.field select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.field select option { background: #1A1D26; color: var(--text); }
+
+.btn-primary {
+  width: 100%;
+  padding: 11px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity .15s, box-shadow .15s;
+  margin-top: 6px;
+  letter-spacing: 0.1px;
+}
+
+.btn-primary:hover {
+  opacity: .9;
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.login-hint {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 12px;
+  text-align: center;
+}
+
+.login-hint code {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--glass);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--text2);
+}
+
+.login-switch {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.login-switch a {
+  color: var(--accent2);
+  cursor: pointer;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.login-switch a:hover { text-decoration: underline; }
+
+/* ═══════════════════════════════════════
+   DEALER LAYOUT
+═══════════════════════════════════════ */
+.dealer-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dealer-topbar {
+  background: var(--ink2);
+  border-bottom: 1px solid var(--border);
+  padding: 0 2rem;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar-brand-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.topbar-brand-name span { color: var(--text3); font-weight: 400; }
+
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.topbar-user .avatar {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent2);
+}
+
+.topbar-user .uname { font-size: 12px; font-weight: 500; }
+.topbar-user .uid   { font-size: 10px; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+
+.btn-sm {
+  padding: 6px 14px;
+  background: var(--glass);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all .12s;
+}
+
+.btn-sm:hover { background: var(--glass2); color: var(--text); border-color: var(--border2); }
+
+.dealer-body { padding: 2rem; max-width: 1000px; margin: 0 auto; width: 100%; }
+
+.dealer-hero {
+  background: linear-gradient(135deg, var(--ink3) 0%, var(--ink2) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 2rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dealer-hero-left h2 {
+  font-family: 'Syne', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+
+.dealer-hero-left p { color: var(--text2); font-size: 13px; }
+
+.dealer-hero-right { text-align: right; }
+
+.date-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text2);
+}
+
+/* CHECKLIST TABS */
+.cl-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--ink2);
+  border: 1px solid var(--border);
+  padding: 5px;
+  border-radius: var(--radius);
+  margin-bottom: 1.5rem;
+}
+
+.cl-tab {
+  flex: 1;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text2);
+  transition: all .15s;
+  text-align: center;
+}
+
+.cl-tab.active {
+  background: var(--ink4);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+.cl-tab:hover:not(.active) { color: var(--text); }
+
+.checklist-section { display: none; }
+.checklist-section.active { display: block; }
+
+/* CHECKLIST TABLE */
+.cl-table-wrap {
+  background: var(--ink2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.cl-head {
+  display: grid;
+  grid-template-columns: 44px 1fr 280px 1fr;
+  padding: 10px 16px;
+  background: var(--ink3);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text3);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.cl-row {
+  display: grid;
+  grid-template-columns: 44px 1fr 280px 1fr;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  transition: background .1s;
+}
+
+.cl-row:last-child { border-bottom: none; }
+.cl-row:hover { background: var(--glass); }
+
+.cl-num {
+  color: var(--text3);
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  padding-top: 3px;
+}
+
+.cl-label {
+  font-size: 13px;
+  padding-top: 3px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+/* STATUS RADIOS */
+.status-group { display: flex; gap: 5px; flex-wrap: nowrap; align-items: center; }
+.status-radio { display: none; }
+.status-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border2);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .12s;
+  color: var(--text2);
+  background: var(--glass);
+  white-space: nowrap;
+}
+
+.status-label .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text4);
+  transition: background .12s;
+  flex-shrink: 0;
+}
+
+.status-radio[value="completed"]:checked + .status-label { background: var(--green-dim); border-color: rgba(34,197,94,0.4); color: var(--green); }
+.status-radio[value="completed"]:checked + .status-label .dot { background: var(--green); }
+.status-radio[value="partial"]:checked  + .status-label { background: var(--amber-dim); border-color: rgba(245,158,11,0.4); color: var(--amber); }
+.status-radio[value="partial"]:checked  + .status-label .dot { background: var(--amber); }
+.status-radio[value="notdone"]:checked  + .status-label { background: var(--red-dim); border-color: rgba(239,68,68,0.4); color: var(--red); }
+.status-radio[value="notdone"]:checked  + .status-label .dot { background: var(--red); }
+
+/* REMARKS */
+.remarks-area { display: flex; flex-direction: column; gap: 4px; }
+
+.remarks-input {
+  width: 100%;
+  padding: 7px 10px;
+  background: var(--glass);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 34px;
+  max-height: 80px;
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s;
+}
+
+.remarks-input::placeholder { color: var(--text3); }
+.remarks-input:focus { border-color: var(--accent); }
+.remarks-input.mandatory { border-color: var(--red); background: var(--red-dim); }
+
+.remarks-hint { font-size: 11px; color: var(--text3); display: none; }
+.remarks-hint.show { display: block; }
+.remarks-hint.required { color: var(--red); }
+
+/* SECTION FOOTER */
+.section-footer {
+  margin-top: 1.5rem;
+  background: var(--ink2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.progress-block { flex: 1; }
+
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 6px;
+}
+
+.progress-track {
+  height: 4px;
+  background: var(--ink4);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent) 0%, #7C9FFF 100%);
+  transition: width .3s ease;
+}
+
+.submit-msg {
+  font-size: 12px;
+  color: var(--green);
+  display: none;
+  white-space: nowrap;
+}
+
+.submit-msg.show { display: block; }
+
+.btn-submit {
+  padding: 9px 22px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity .15s, box-shadow .15s;
+  white-space: nowrap;
+}
+
+.btn-submit:hover {
+  opacity: .9;
+  box-shadow: 0 0 16px var(--accent-glow);
+}
+
+.btn-submit:disabled { opacity: .35; cursor: default; box-shadow: none; }
+
+/* ═══════════════════════════════════════
+   ADMIN LAYOUT — SIDEBAR
+═══════════════════════════════════════ */
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* SIDEBAR */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--ink2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  z-index: 100;
+  overflow-y: auto;
+}
+
+.sidebar-logo {
+  padding: 1.25rem 1.25rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-logo-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-brand {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  line-height: 1.2;
+}
+
+.sidebar-brand sub {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text3);
+  letter-spacing: 0.3px;
+}
+
+.sidebar-admin-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0.75rem 1.25rem;
+  padding: 7px 10px;
+  background: var(--violet-dim);
+  border: 1px solid rgba(168,85,247,0.2);
+  border-radius: var(--radius-sm);
+}
+
+.sidebar-admin-badge .shield {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  background: rgba(168,85,247,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+}
+
+.sidebar-admin-badge .info { flex: 1; }
+
+.sidebar-admin-badge .aname {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sidebar-admin-badge .arole {
+  font-size: 10px;
+  color: var(--violet);
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.sidebar-nav {
+  padding: 0.75rem 0.75rem;
+  flex: 1;
+}
+
+.nav-section-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text3);
+  padding: 0.5rem 0.5rem 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all .12s;
+  margin-bottom: 1px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  width: 100%;
+  text-align: left;
+}
+
+.nav-item:hover { background: var(--glass2); color: var(--text); }
+
+.nav-item.active {
+  background: var(--accent-dim);
+  color: var(--accent2);
+  border: 1px solid rgba(59,123,255,0.2);
+}
+
+.nav-item .nav-icon {
+  width: 18px; height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.nav-item.active .nav-icon { opacity: 1; }
+
+.nav-badge {
+  margin-left: auto;
+  background: var(--accent-dim);
+  color: var(--accent2);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.nav-badge.red-badge {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+.sidebar-footer {
+  padding: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+/* ADMIN MAIN */
+.admin-main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ADMIN TOPBAR */
+.admin-topbar {
+  background: var(--ink2);
+  border-bottom: 1px solid var(--border);
+  padding: 0 2rem;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.admin-topbar-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.admin-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-dot-live {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px rgba(34,197,94,0.6);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.live-label {
+  font-size: 11px;
+  color: var(--green);
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ADMIN PANELS */
+.admin-panel {
+  display: none;
+  padding: 2rem;
+}
+
+.admin-panel.active { display: block; }
+
+/* ═══════════════════════════════════════
+   ADMIN — OVERVIEW PANEL
+═══════════════════════════════════════ */
+.panel-header {
+  margin-bottom: 1.5rem;
+}
+
+.panel-header h2 {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  margin-bottom: 3px;
+}
+
+.panel-header p { color: var(--text2); font-size: 13px; }
+
+/* KPI GRID */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.kpi-card {
+  background: var(--ink2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  position: relative;
+  overflow: hidden;
+  transition: border-color .15s;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+}
+
+.kpi-card.total::before { background: var(--accent); }
+.kpi-card.done::before  { background: var(--green); }
+.kpi-card.partial::before{ background: var(--amber); }
+.kpi-card.nd::before    { background: var(--red); }
+.kpi-card.empty::before { background: var(--text3); }
+
+.kpi-card:hover { border-color: var(--border2); }
+
+.kpi-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 8px;
+}
+
+.kpi-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.kpi-value.c-accent { color: var(--accent2); }
+.kpi-value.c-green  { color: var(--green); }
+.kpi-value.c-amber  { color: var(--amber); }
+.kpi-value.c-red    { color: var(--red); }
+.kpi-value.c-muted  { color: var(--text3); }
+
+.kpi-sub {
+  font-size: 11px;
+  color: var(--text3);
+}
+
+/* COMPLIANCE CHART */
+.admin-charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.chart-card {
+  background: var(--ink2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+
+.chart-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  letter-spacing: 0.3px;
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+}
+
+/* SVG MINI CHARTS */
+.donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.donut-legend { flex: 1; }
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.legend-item:last-child { border-bottom: none; }
+
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+.legend-label { flex: 1; color: var(--text2); }
+
+.legend-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* BAR MINI CHART */
+.mini-bars { display: flex; flex-direction: column; gap: 10px; }
+
+.mini-bar-row { display: flex; flex-direction: column; gap: 4px; }
+
+.mini-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text2);
+}
+
+.mini-bar-track {
+  height: 6px;
+  background: var(--ink4);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.mini-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width .5s ease;
+}
+
+/* ADMIN FILTERS */
+.admin-filters-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text3);
+  letter-spacing: 0.3px;
+}
+
+.filter-select {
+  padding: 7px 12px;
+  background: var(--ink2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text);
+  outline: none;
+  cursor: pointer;
+  transition: border-color .15s;
+  -webkit-appearance: none;
+  min-width: 140px;
+}
+
+.filter-select:focus { border-color: var(--accent); }
+.filter-select option { background: #1A1D26; }
+
+.search-input {
+  padding: 7px 12px;
+  background: var(--ink2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s;
+  min-width: 200px;
+}
+
+.search-input::placeholder { color: var(--text3); }
+.search-input:focus { border-color: var(--accent); }
+
+/* ADMIN TABLE */
+.table-card {
+  background: var(--ink2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.table-card-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.table-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.table-count {
+  font-size: 11px;
+  color: var(--text3);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin-table thead tr {
+  background: var(--ink3);
+}
+
+.admin-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text3);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.admin-table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.admin-table tr:last-child td { border-bottom: none; }
+.admin-table tbody tr:hover td { background: var(--glass); }
+
+/* CHIPS & PILLS */
+.dealer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.dp-d1 { background: var(--d1-dim); color: var(--d1); border: 1px solid rgba(56,189,248,0.2); }
+.dp-d2 { background: var(--d2-dim); color: var(--d2); border: 1px solid rgba(52,211,153,0.2); }
+.dp-d3 { background: var(--d3-dim); color: var(--d3); border: 1px solid rgba(244,114,182,0.2); }
+
+.dealer-name { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+.section-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--glass2);
+  color: var(--text2);
+  letter-spacing: 0.2px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.sc-completed { background: var(--green-dim); color: var(--green); }
+.sc-partial   { background: var(--amber-dim); color: var(--amber); }
+.sc-notdone   { background: var(--red-dim);   color: var(--red); }
+.sc-empty     { background: var(--glass);      color: var(--text3); }
+
+.remarks-cell {
+  max-width: 180px;
+  color: var(--text2);
+  font-size: 12px;
+  word-break: break-word;
+  font-style: italic;
+}
+
+.time-cell {
+  font-size: 11px;
+  color: var(--text3);
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+}
+
+.no-data {
+  padding: 3rem;
+  text-align: center;
+  color: var(--text3);
+}
+
+.no-data-icon { font-size: 32px; margin-bottom: 8px; opacity: 0.4; }
+.no-data strong { display: block; font-size: 14px; color: var(--text2); margin-bottom: 5px; font-weight: 500; }
+.no-data p { font-size: 12px; }
+
+/* DEALER SUMMARY CARDS */
+.dealer-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  margin-top: 1.5rem;
+}
+
+.ds-card {
+  background: var(--ink2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  transition: border-color .15s;
+}
+
+.ds-card:hover { border-color: var(--border2); }
+
+.ds-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.ds-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.ds-time { font-size: 10px; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+
+.ds-bar {
+  height: 6px;
+  background: var(--ink4);
+  border-radius: 3px;
+  margin: 0.75rem 0;
+  display: flex;
+  overflow: hidden;
+  gap: 1px;
+}
+
+.ds-seg { height: 100%; transition: width .4s; }
+
+.ds-counts {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.ds-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text2);
+}
+
+.ds-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+}
+
+.ds-meta {
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+}
+
+/* ALERT BADGES */
+.alert-card {
+  background: var(--red-dim);
+  border: 1px solid rgba(239,68,68,0.25);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.alert-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.alert-text strong { display: block; font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.alert-text p { font-size: 12px; color: var(--text2); }
+
+/* EXPORT BTN */
+.btn-export {
+  padding: 7px 16px;
+  background: var(--glass);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all .12s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-export:hover { background: var(--glass2); color: var(--text); }
+
+/* SECTION DIVIDER */
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 1.5rem 0 1rem;
+}
+
+.section-divider h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* TOOLTIP BADGE */
+.tooltip-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--text3);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ═══════════════════════════════════════
+   ADMIN — ALERTS PANEL
+═══════════════════════════════════════ */
+.alerts-list { display: flex; flex-direction: column; gap: 8px; }
+
+.alert-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--ink2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  transition: border-color .12s;
+}
+
+.alert-row:hover { border-color: var(--border2); }
+
+.alert-row.severity-high { border-left: 3px solid var(--red); }
+.alert-row.severity-med  { border-left: 3px solid var(--amber); }
+.alert-row.severity-low  { border-left: 3px solid var(--accent); }
+
+.alert-sev {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.sev-high { background: var(--red-dim); color: var(--red); }
+.sev-med  { background: var(--amber-dim); color: var(--amber); }
+.sev-low  { background: var(--accent-dim); color: var(--accent2); }
+
+.alert-body { flex: 1; }
+.alert-body strong { font-size: 13px; font-weight: 600; display: block; margin-bottom: 3px; }
+.alert-body p { font-size: 12px; color: var(--text2); }
+
+.alert-time { font-size: 10px; color: var(--text3); font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+
+/* ═══════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════ */
+@media (max-width: 900px) {
+  .login-grid { grid-template-columns: 1fr; }
+  .login-left { display: none; }
+  .login-right { padding: 2rem; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .admin-charts { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .admin-main { margin-left: 0; }
+  .cl-head, .cl-row { grid-template-columns: 36px 1fr; }
+  .cl-head .col-status, .cl-row .col-status,
+  .cl-head .col-remarks, .cl-row .col-remarks { display: none; }
+}
+/* ═══════════════════════════════════════
+   CHECKLIST MANAGER (ADMIN)
+═══════════════════════════════════════ */
+.cl-mgmt-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--ink3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  transition: background .15s;
+}
+.cl-mgmt-item:hover { background: var(--ink4); }
+.cl-mgmt-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text3);
+  width: 22px;
+  flex-shrink: 0;
+}
+.cl-mgmt-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: 'Inter', sans-serif;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background .15s;
+}
+.cl-mgmt-text:focus {
+  background: var(--ink2);
+  outline: 1px solid var(--accent);
+}
+.cl-mgmt-del {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text3);
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+.cl-mgmt-del:hover { background: var(--red-dim); border-color: rgba(239,68,68,0.3); color: var(--red); }
+.cl-mgmt-tab {
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border2);
+  background: var(--ink3);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.cl-mgmt-tab.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent2);
+}
+.cl-mgmt-save {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════
+  DEALER LOGIN
+════════════════════════════════════════════════════ -->
+<div id="dealerLogin" class="view active">
+  <div class="login-screen">
+    <div class="login-grid">
+      <div class="login-left">
+        <div class="login-brand">
+          <div class="brand-logo">
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+              <path d="M3 16L8 9.5L12 13L15 9L19 16" stroke="#3B7BFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="15.5" cy="7" r="2" fill="rgba(59,123,255,0.7)"/>
+            </svg>
+          </div>
+          <div>
+            <div class="brand-name">NBS Compliance Hub <span>/ v2.0</span></div>
+          </div>
+        </div>
+        <div class="login-headline">Broker-grade <em>compliance</em> for every trading day.</div>
+        <p class="login-sub">Daily checklists for dealer compliance, back office ops, and KYC — streamlined into one secure workflow.</p>
+        <div class="login-pills">
+          <div class="login-pill"><span class="dot" style="background:var(--green)"></span>Dealer Compliance</div>
+          <div class="login-pill"><span class="dot" style="background:var(--accent)"></span>Back Office Ops</div>
+          <div class="login-pill"><span class="dot" style="background:var(--violet)"></span>KYC Department</div>
+          <div class="login-pill"><span class="dot" style="background:var(--amber)"></span>SEBI Aligned</div>
+        </div>
+      </div>
+      <div class="login-right">
+        <div class="login-card">
+          <div class="login-role-badge role-dealer">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><circle cx="5" cy="3" r="2"/><path d="M1 9c0-2.2 1.8-4 4-4s4 1.8 4 4"/></svg>
+            Dealer Portal
+          </div>
+          <div class="login-card-header">
+            <h2>Sign In</h2>
+            <p>Access your daily compliance checklist.</p>
+          </div>
+          <div class="field">
+            <label>Dealer ID</label>
+            <select id="dealerSelect">
+              <option value="">— select your dealer ID —</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input type="password" placeholder="Enter your password" id="dealerPass" onkeydown="if(event.key==='Enter')dealerLogin()">
+          </div>
+          <button class="btn-primary" onclick="dealerLogin()">Access Checklist →</button>
+          <div class="login-switch">Admin? <a onclick="showAdminLogin()">Switch to Admin Sign In →</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+  ADMIN LOGIN
+════════════════════════════════════════════════════ -->
+<div id="adminLogin" class="view">
+  <div class="login-screen">
+    <div class="login-grid">
+      <div class="login-left">
+        <div class="login-brand">
+          <div class="brand-logo" style="background:var(--violet-dim);border-color:rgba(168,85,247,0.3)">
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+              <rect x="4" y="10" width="14" height="10" rx="2" stroke="#A855F7" stroke-width="1.5"/>
+              <path d="M7 10V7a4 4 0 018 0v3" stroke="#A855F7" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div>
+            <div class="brand-name">NBS Compliance Hub <span>/ Admin</span></div>
+          </div>
+        </div>
+        <div class="login-headline">Complete <em>oversight</em> for compliance managers.</div>
+        <p class="login-sub">Real-time submission monitoring, dealer performance analytics, and compliance risk flagging — all in one command centre.</p>
+        <div class="login-pills">
+          <div class="login-pill"><span class="dot" style="background:var(--violet)"></span>Full Access</div>
+          <div class="login-pill"><span class="dot" style="background:var(--green)"></span>Live Monitoring</div>
+          <div class="login-pill"><span class="dot" style="background:var(--red)"></span>Risk Alerts</div>
+          <div class="login-pill"><span class="dot" style="background:var(--amber)"></span>Analytics</div>
+        </div>
+      </div>
+      <div class="login-right">
+        <div class="login-card">
+          <div class="login-role-badge role-admin">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="1" y="4" width="8" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M3 4V3a2 2 0 014 0v1" stroke="currentColor" stroke-width="1.2"/></svg>
+            Admin Access
+          </div>
+          <div class="login-card-header">
+            <h2>Admin Sign In</h2>
+            <p>Restricted to compliance managers.</p>
+          </div>
+          <div class="field">
+            <label>Username</label>
+            <input type="text" placeholder="admin" id="adminUser" onkeydown="if(event.key==='Enter')adminLogin()">
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input type="password" placeholder="Enter admin password" id="adminPass" onkeydown="if(event.key==='Enter')adminLogin()">
+          </div>
+          <button class="btn-primary" style="background:var(--violet)" onclick="adminLogin()">Enter Admin Dashboard →</button>
+          <div class="login-switch">Not an admin? <a onclick="showDealerLogin()">← Return to Dealer Sign In</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+  DEALER DASHBOARD
+════════════════════════════════════════════════════ -->
+<div id="dealerDash" class="view">
+  <div class="dealer-layout">
+    <!-- Topbar -->
+    <nav class="dealer-topbar">
+      <div class="topbar-brand">
+        <div class="brand-logo" style="width:32px;height:32px;border-radius:8px;">
+          <svg width="16" height="16" viewBox="0 0 22 22" fill="none">
+            <path d="M3 16L8 9.5L12 13L15 9L19 16" stroke="#3B7BFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="topbar-brand-name">NBS Compliance Hub <span>/ Daily Checklist</span></div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-user">
+          <div class="avatar" id="dealerAvatar">R</div>
+          <div>
+            <div class="uname" id="dealerUname">—</div>
+            <div class="uid" id="dealerUID">—</div>
+          </div>
+        </div>
+        <div class="date-chip">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="2" width="10" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M4 1v2M8 1v2M1 5h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          <span id="currentDate">—</span>
+        </div>
+        <button class="btn-sm" onclick="dealerLogout()">Sign Out</button>
+      </div>
+    </nav>
+
+    <!-- Body -->
+    <div class="dealer-body">
+      <div class="dealer-hero">
+        <div class="dealer-hero-left">
+          <h2>Good <span id="greeting">day</span>, <span id="dealerWelcomeName">—</span></h2>
+          <p id="dealerSub">Complete your daily compliance checklist below.</p>
+        </div>
+        <div class="dealer-hero-right">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:6px;text-align:right">Overall completion</div>
+          <div style="font-size:26px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--accent2)" id="overallPct">0%</div>
+        </div>
+      </div>
+
+      <!-- TABS -->
+      <div class="cl-tabs">
+        <button class="cl-tab active" onclick="switchTab(0)">
+          <span>Dealer Compliance</span>
+        </button>
+        <button class="cl-tab" onclick="switchTab(1)">Back Office Ops</button>
+        <button class="cl-tab" onclick="switchTab(2)">KYC Department</button>
+      </div>
+
+      <!-- SECTION 0: Dealer Compliance -->
+      <div class="checklist-section active" id="section-0">
+        <div class="cl-table-wrap">
+          <div class="cl-head">
+            <span>#</span><span>Checklist Item</span>
+            <span class="col-status">Status</span>
+            <span class="col-remarks">Remarks / Notes</span>
+          </div>
+          <div id="cl-0"></div>
+        </div>
+        <div class="section-footer">
+          <div class="progress-block">
+            <div class="progress-labels">
+              <span id="prog-label-0">0 of 15 items filled</span>
+              <span id="prog-pct-0" style="font-weight:600;color:var(--accent2)">0%</span>
+            </div>
+            <div class="progress-track"><div class="progress-fill" id="prog-fill-0" style="width:0%"></div></div>
+          </div>
+          <span class="submit-msg" id="submit-msg-0">✓ Submitted</span>
+          <button class="btn-submit" id="submit-btn-0" onclick="submitSection(0)">Submit Section</button>
+        </div>
+      </div>
+
+      <!-- SECTION 1: Back Office -->
+      <div class="checklist-section" id="section-1">
+        <div class="cl-table-wrap">
+          <div class="cl-head">
+            <span>#</span><span>Checklist Item</span>
+            <span class="col-status">Status</span>
+            <span class="col-remarks">Remarks / Notes</span>
+          </div>
+          <div id="cl-1"></div>
+        </div>
+        <div class="section-footer">
+          <div class="progress-block">
+            <div class="progress-labels">
+              <span id="prog-label-1">0 of 22 items filled</span>
+              <span id="prog-pct-1" style="font-weight:600;color:var(--accent2)">0%</span>
+            </div>
+            <div class="progress-track"><div class="progress-fill" id="prog-fill-1" style="width:0%"></div></div>
+          </div>
+          <span class="submit-msg" id="submit-msg-1">✓ Submitted</span>
+          <button class="btn-submit" id="submit-btn-1" onclick="submitSection(1)">Submit Section</button>
+        </div>
+      </div>
+
+      <!-- SECTION 2: KYC -->
+      <div class="checklist-section" id="section-2">
+        <div class="cl-table-wrap">
+          <div class="cl-head">
+            <span>#</span><span>Checklist Item</span>
+            <span class="col-status">Status</span>
+            <span class="col-remarks">Remarks / Notes</span>
+          </div>
+          <div id="cl-2"></div>
+        </div>
+        <div class="section-footer">
+          <div class="progress-block">
+            <div class="progress-labels">
+              <span id="prog-label-2">0 of 22 items filled</span>
+              <span id="prog-pct-2" style="font-weight:600;color:var(--accent2)">0%</span>
+            </div>
+            <div class="progress-track"><div class="progress-fill" id="prog-fill-2" style="width:0%"></div></div>
+          </div>
+          <span class="submit-msg" id="submit-msg-2">✓ Submitted</span>
+          <button class="btn-submit" id="submit-btn-2" onclick="submitSection(2)">Submit Section</button>
+        </div>
+      </div>
+
+    </div><!-- /dealer-body -->
+  </div><!-- /dealer-layout -->
+</div>
+
+<!-- ════════════════════════════════════════════════════
+  ADMIN DASHBOARD
+════════════════════════════════════════════════════ -->
+<div id="adminDash" class="view">
+  <div class="admin-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-inner">
+          <div class="brand-logo" style="width:36px;height:36px;background:var(--violet-dim);border-color:rgba(168,85,247,0.3)">
+            <svg width="16" height="16" viewBox="0 0 22 22" fill="none">
+              <rect x="4" y="10" width="14" height="10" rx="2" stroke="#A855F7" stroke-width="1.5"/>
+              <path d="M7 10V7a4 4 0 018 0v3" stroke="#A855F7" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="sidebar-brand">
+            NBS Hub
+            <sub>Admin Command Centre</sub>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-admin-badge">
+        <div class="shield">🛡</div>
+        <div class="info">
+          <div class="aname">Administrator</div>
+          <div class="arole">FULL ACCESS</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Analytics</div>
+        <button class="nav-item active" onclick="switchPanel('overview',this)">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="9" width="3" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="6" y="5" width="3" height="10" rx="1" fill="currentColor"/><rect x="11" y="1" width="3" height="14" rx="1" fill="currentColor" opacity=".7"/></svg>
+          </span>
+          Overview
+        </button>
+        <button class="nav-item" onclick="switchPanel('submissions',this)">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 5h6M5 8h6M5 11h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          </span>
+          Submissions
+          <span class="nav-badge" id="subCountBadge">0</span>
+        </button>
+        <button class="nav-item" onclick="switchPanel('dealers',this)">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M1 13c0-2.8 2.2-5 5-5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="12" cy="7" r="2" stroke="currentColor" stroke-width="1.3"/><path d="M9 14c0-1.7 1.3-3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          </span>
+          Dealer Summary
+        </button>
+
+        <button class="nav-item" onclick="switchPanel('history',this)">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.5l2.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          Past Data
+        </button>
+
+        <div class="nav-section-label">Compliance</div>
+        <button class="nav-item" onclick="switchPanel('alerts',this)">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2L2 13h12L8 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 7v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.5" r=".7" fill="currentColor"/></svg>
+          </span>
+          Risk Alerts
+          <span class="nav-badge red-badge" id="alertCountBadge">0</span>
+        </button>
+
+        <div class="nav-section-label">Management</div>
+        <button class="nav-item" onclick="switchPanel('manage',this)">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6" cy="4" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M1 12c0-2.2 2.2-4 5-4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M11 8v5M8.5 10.5H13.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </span>
+          Manage Dealers
+        </button>
+
+        <div class="nav-section-label">Account</div>
+        <button class="nav-item" onclick="adminLogout()">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 5L14 8L10 11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 8H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </span>
+          Sign Out
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="date-chip" style="width:100%;justify-content:center">
+          <span id="adminDate">—</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="admin-main">
+      <!-- Topbar -->
+      <div class="admin-topbar">
+        <div class="admin-topbar-title" id="panelTitle">Compliance Overview</div>
+        <div class="admin-topbar-right">
+          <div class="live-label">
+            <div class="status-dot-live"></div> LIVE
+          </div>
+          <button class="btn-sm" onclick="renderAdmin()">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M10 6A4 4 0 112 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M10 3v3H7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Refresh
+          </button>
+          <button class="btn-export" onclick="exportCSV()">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5l3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 9v1a1 1 0 001 1h8a1 1 0 001-1V9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- ─── OVERVIEW PANEL ─── -->
+      <div class="admin-panel active" id="panel-overview">
+        <div class="panel-header">
+          <h2>Compliance Overview</h2>
+          <p>Today's submission summary across all dealers and checklist categories.</p>
+        </div>
+
+        <!-- KPI GRID -->
+        <div class="kpi-grid" id="adminStats"></div>
+
+        <!-- CHARTS ROW -->
+        <div class="admin-charts">
+          <div class="chart-card">
+            <div class="chart-title">Status Distribution</div>
+            <div class="donut-wrap" id="donutWrap">
+              <svg width="120" height="120" viewBox="0 0 120 120" id="donutSvg">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="var(--ink4)" stroke-width="16"/>
+                <!-- Arcs injected by JS -->
+              </svg>
+              <div class="donut-legend" id="donutLegend"></div>
+            </div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Dealer Completion Rate</div>
+            <div class="mini-bars" id="dealerBars"></div>
+          </div>
+        </div>
+
+        <!-- ALERT RIBBON -->
+        <div id="alertRibbon"></div>
+      </div>
+
+      <!-- ─── SUBMISSIONS PANEL ─── -->
+      <div class="admin-panel" id="panel-submissions">
+        <div class="panel-header">
+          <h2>All Submissions</h2>
+          <p>Full itemized view of every checklist entry submitted today.</p>
+        </div>
+        <div class="admin-filters-row">
+          <span class="filter-label">FILTER:</span>
+          <select class="filter-select" id="filterDealer" onchange="renderAdmin()">
+            <option value="">All Dealers</option>
+          </select>
+          <select class="filter-select" id="filterSection" onchange="renderAdmin()">
+            <option value="">All Sections</option>
+            <option value="0">Dealer Compliance</option>
+            <option value="1">Back Office Ops</option>
+            <option value="2">KYC Department</option>
+          </select>
+          <select class="filter-select" id="filterStatus" onchange="renderAdmin()">
+            <option value="">All Statuses</option>
+            <option value="completed">Completed</option>
+            <option value="partial">Partial Done</option>
+            <option value="notdone">Not Done</option>
+          </select>
+          <input class="search-input" id="searchInput" placeholder="Search checklist items…" oninput="renderAdmin()">
+        </div>
+        <div class="table-card">
+          <div class="table-card-header">
+            <span class="table-card-title">Submissions</span>
+            <span class="table-count" id="tableCount">0 records</span>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Dealer</th>
+                  <th>Section</th>
+                  <th>#</th>
+                  <th>Checklist Item</th>
+                  <th>Status</th>
+                  <th>Remarks</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="adminTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── DEALERS PANEL ─── -->
+      <div class="admin-panel" id="panel-dealers">
+        <div class="panel-header">
+          <h2>Dealer Summary</h2>
+          <p>Individual performance cards for each registered dealer.</p>
+        </div>
+        <div class="dealer-summary-grid" id="dealerSummaryGrid"></div>
+      </div>
+
+      <!-- ─── ALERTS PANEL ─── -->
+      <div class="admin-panel" id="panel-alerts">
+        <div class="panel-header">
+          <h2>Risk Alerts</h2>
+          <p>Compliance flags generated from today's checklist submissions.</p>
+        </div>
+        <div class="alerts-list" id="alertsList"></div>
+      </div>
+
+      <!-- ─── PAST DATA PANEL ─── -->
+      <div class="admin-panel" id="panel-history">
+        <div class="panel-header">
+          <h2>Past Data</h2>
+          <p>Historical compliance records — drill into any date, dealer or section across the last 5 years.</p>
+        </div>
+
+        <!-- Controls row -->
+        <div class="history-controls">
+          <div class="history-ctrl-group">
+            <label class="history-ctrl-label">Year</label>
+            <select class="filter-select" id="histYear" onchange="renderHistory()">
+            </select>
+          </div>
+          <div class="history-ctrl-group">
+            <label class="history-ctrl-label">Month</label>
+            <select class="filter-select" id="histMonth" onchange="renderHistory()">
+              <option value="">All Months</option>
+              <option value="01">January</option><option value="02">February</option>
+              <option value="03">March</option><option value="04">April</option>
+              <option value="05">May</option><option value="06">June</option>
+              <option value="07">July</option><option value="08">August</option>
+              <option value="09">September</option><option value="10">October</option>
+              <option value="11">November</option><option value="12">December</option>
+            </select>
+          </div>
+          <div class="history-ctrl-group">
+            <label class="history-ctrl-label">Dealer</label>
+            <select class="filter-select" id="histDealer" onchange="renderHistory()">
+              <option value="">All Dealers</option>
+            </select>
+          </div>
+          <div class="history-ctrl-group">
+            <label class="history-ctrl-label">Section</label>
+            <select class="filter-select" id="histSection" onchange="renderHistory()">
+              <option value="">All Sections</option>
+              <option value="0">Dealer Compliance</option>
+              <option value="1">Back Office Ops</option>
+              <option value="2">KYC Department</option>
+            </select>
+          </div>
+          <div class="history-ctrl-group">
+            <label class="history-ctrl-label">Status</label>
+            <select class="filter-select" id="histStatus" onchange="renderHistory()">
+              <option value="">All Statuses</option>
+              <option value="completed">Completed</option>
+              <option value="partial">Partial Done</option>
+              <option value="notdone">Not Done</option>
+            </select>
+          </div>
+          <button class="btn-sm" onclick="clearHistoryFilters()" style="margin-top:18px;color:var(--text3)">Clear</button>
+        </div>
+
+        <!-- Summary KPI strip -->
+        <div class="history-kpi-strip" id="histKpiStrip"></div>
+
+        <!-- Per-dealer compliance trend bars -->
+        <div class="table-card" style="margin-bottom:1.5rem" id="histTrendCard">
+          <div class="table-card-header">
+            <span class="table-card-title">Dealer Compliance Rate — Selected Period</span>
+            <span class="table-count" id="histTrendRange">—</span>
+          </div>
+          <div id="histDealerTrend" style="padding:1rem 1.5rem"></div>
+        </div>
+
+        <!-- Date-by-date breakdown table -->
+        <div class="table-card">
+          <div class="table-card-header">
+            <span class="table-card-title">Submission Log</span>
+            <span class="table-count" id="histTableCount">0 records</span>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Dealer</th>
+                  <th>Section</th>
+                  <th>Item</th>
+                  <th>Status</th>
+                  <th>Remarks</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="histTableBody"></tbody>
+            </table>
+          </div>
+          <div id="histPagination" style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1.25rem;border-top:1px solid var(--border)">
+            <button class="btn-sm" id="histPrevBtn" onclick="histPage(-1)">← Prev</button>
+            <span id="histPageInfo" style="font-size:12px;color:var(--text2)">Page 1</span>
+            <button class="btn-sm" id="histNextBtn" onclick="histPage(1)">Next →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── MANAGE DEALERS PANEL ─── -->
+      <div class="admin-panel" id="panel-manage">
+        <div class="panel-header">
+          <h2>Manage Dealers</h2>
+          <p>Add or remove dealers, assign checklist tasks, and set login passwords.</p>
+        </div>
+
+        <!-- Add Dealer Card -->
+        <div class="table-card" style="margin-bottom:1.5rem">
+          <div class="table-card-header">
+            <span class="table-card-title">Add New Dealer</span>
+          </div>
+          <div style="padding:1.25rem;display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end">
+            <div>
+              <div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Dealer ID</div>
+              <input class="search-input" id="newDealerID" placeholder="e.g. D004" style="width:100%">
+            </div>
+            <div>
+              <div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Full Name</div>
+              <input class="search-input" id="newDealerName" placeholder="e.g. Sunita Rao" style="width:100%">
+            </div>
+            <div>
+              <div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Password</div>
+              <input class="search-input" type="password" id="newDealerPass" placeholder="Set login password" style="width:100%">
+            </div>
+            <button class="btn-submit" onclick="addDealer()" style="white-space:nowrap">+ Add Dealer</button>
+          </div>
+        </div>
+
+        <!-- Manage Checklist Items Card -->
+        <div class="table-card" style="margin-bottom:1.5rem">
+          <div class="table-card-header">
+            <span class="table-card-title">Manage Checklist Items</span>
+            <span class="table-count" id="clMgmtCount"></span>
+          </div>
+          <div style="padding:1.25rem">
+            <!-- Section Tabs -->
+            <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap" id="clMgmtTabs"></div>
+            <!-- Add Item Row -->
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:1rem">
+              <input class="search-input" id="clNewItemText" placeholder="New checklist item text…" style="flex:1">
+              <button class="btn-submit" onclick="clAddItem()" style="white-space:nowrap;padding:8px 18px">+ Add Item</button>
+            </div>
+            <!-- Items List -->
+            <div id="clItemsList" style="display:flex;flex-direction:column;gap:6px"></div>
+          </div>
+        </div>
+
+        <!-- Dealers Table -->
+        <div class="table-card">
+          <div class="table-card-header">
+            <span class="table-card-title">Registered Dealers</span>
+            <span class="table-count" id="dealerMgmtCount">0 dealers</span>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Dealer ID</th>
+                  <th>Full Name</th>
+                  <th>Assigned Sections</th>
+                  <th>Password</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="dealerMgmtBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+  GOOGLE SHEETS SETUP MODAL
+════════════════════════════════════════════════════ -->
+<div id="sheetsSetupOverlay" style="
+  position:fixed;inset:0;z-index:9999;
+  background:rgba(10,11,15,0.96);
+  display:flex;align-items:center;justify-content:center;
+  backdrop-filter:blur(8px);
+">
+  <div style="
+    background:var(--ink2);border:1px solid var(--border2);
+    border-radius:16px;padding:2.5rem;max-width:520px;width:90%;
+  ">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:1.5rem">
+      <div style="width:40px;height:40px;background:var(--green-dim);border:1px solid rgba(34,197,94,0.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px">📊</div>
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700">Connect Google Sheets</div>
+        <div style="font-size:12px;color:var(--text3)">Required for data persistence across devices</div>
+      </div>
+    </div>
+
+    <div style="background:var(--ink3);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.5rem;font-size:12px;color:var(--text2);line-height:1.7">
+      <strong style="color:var(--text);display:block;margin-bottom:6px">Setup Instructions:</strong>
+      1. Open <strong style="color:var(--accent2)">Google Sheets</strong> and create a new spreadsheet.<br>
+      2. Go to <strong style="color:var(--accent2)">Extensions → Apps Script</strong>.<br>
+      3. Paste the Apps Script code (copy it below) and click <strong style="color:var(--accent2)">Deploy → New deployment → Web app</strong>.<br>
+      4. Set <em>Execute as: Me</em> and <em>Who has access: Anyone</em>. Click Deploy.<br>
+      5. Copy the Web App URL and paste it below.
+    </div>
+
+    <div style="margin-bottom:1.25rem">
+      <button onclick="copyGASCode()" style="
+        width:100%;padding:9px;background:var(--glass);border:1px solid var(--border2);
+        border-radius:8px;font-size:12px;font-weight:600;font-family:inherit;
+        color:var(--accent2);cursor:pointer;transition:all .15s;margin-bottom:10px;
+      ">📋 Copy Apps Script Code</button>
+
+      <label style="font-size:11px;font-weight:600;color:var(--text3);letter-spacing:0.6px;text-transform:uppercase;display:block;margin-bottom:6px">Google Apps Script Web App URL</label>
+      <input id="gasUrlInput" type="url" placeholder="https://script.google.com/macros/s/…/exec"
+        style="width:100%;padding:10px 14px;background:var(--glass);border:1px solid var(--border2);
+        border-radius:8px;font-size:13px;font-family:inherit;color:var(--text);outline:none;
+        transition:border-color .15s;box-sizing:border-box"
+        onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
+    </div>
+
+    <button onclick="connectSheets()" style="
+      width:100%;padding:11px;background:var(--accent);color:#fff;border:none;
+      border-radius:8px;font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;
+      transition:opacity .15s;
+    ">Connect & Continue</button>
+
+    <div id="sheetsConnectErr" style="font-size:12px;color:var(--red);margin-top:10px;display:none;text-align:center"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+  SCRIPTS
+════════════════════════════════════════════════════ -->
+<script>
+/* ══════════════════════════════════════════════════════
+   GOOGLE SHEETS BACKEND
+══════════════════════════════════════════════════════ */
+const GAS_URL_KEY = 'nbs_gas_url';
+const GAS_URL_HARDCODED = 'https://script.google.com/macros/s/AKfycbwhhGY2p_zl2nHnLMVceAxNZqwSGF-piT_VBzTOsQp_1aA4oL353dMueceNO6SQ2EGxTA/exec';
+// Prefer previously confirmed URL from sessionStorage; fall back to hardcoded
+let GAS_URL = (() => {
+  try { return sessionStorage.getItem(GAS_URL_KEY) || GAS_URL_HARDCODED; } catch(e) { return GAS_URL_HARDCODED; }
+})();
+
+const GAS_CODE = `
+// NBS Compliance Hub — Google Apps Script Backend
+// Deploy as Web App: Execute as Me, Anyone can access
+
+const SS = SpreadsheetApp.getActiveSpreadsheet();
+
+function doGet(e) {
+  const action  = e.parameter.action;
+  const payload = e.parameter.payload ? JSON.parse(decodeURIComponent(e.parameter.payload)) : null;
+  return _handle(action, payload);
+}
+
+// doPost handles large payloads (e.g. full checklist submissions) sent as JSON body
+function doPost(e) {
+  let body = {};
+  try { body = JSON.parse(e.postData.contents); } catch(err) { body = {}; }
+  return _handle(body.action, body);
+}
+
+function _handle(action, payload) {
+  let result;
+  try {
+    if (action === 'ping')              result = { ok: true };
+    else if (action === 'getAll')       result = getAll();
+    else if (action === 'saveDealers')        result = saveDealers(payload.data);
+    else if (action === 'saveAdmin')          result = saveAdmin(payload.data);
+    else if (action === 'saveSubmission')     result = saveSubmission(payload.data);
+    else if (action === 'clearSubmissions')   result = clearSubmissions();
+    // Legacy: payload nested inside GET param
+    else if (payload && payload.action) {
+      if (payload.action === 'saveDealers')        result = saveDealers(payload.data);
+      else if (payload.action === 'saveAdmin')     result = saveAdmin(payload.data);
+      else if (payload.action === 'saveSubmission')result = saveSubmission(payload.data);
+      else if (payload.action === 'clearSubmissions') result = clearSubmissions();
+      else result = { error: 'Unknown action' };
+    } else {
+      result = { error: 'Unknown action: ' + action };
+    }
+  } catch(err) {
+    result = { error: err.message };
+  }
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function getSheet(name, headers) {
+  let sh = SS.getSheetByName(name);
+  if (!sh) { sh = SS.insertSheet(name); if (headers) sh.appendRow(headers); }
+  return sh;
+}
+
+function getAll() {
+  return { dealers: getSheetData('Dealers'), admin: getSheetData('Admin'), subs: getSheetData('Submissions') };
+}
+
+function getSheetData(name) {
+  const sh = SS.getSheetByName(name);
+  if (!sh) return [];
+  const vals = sh.getDataRange().getValues();
+  if (vals.length <= 1) return [];
+  const headers = vals[0];
+  return vals.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((h,i) => obj[h] = row[i]);
+    return obj;
+  });
+}
+
+function saveDealers(dealers) {
+  const sh = getSheet('Dealers', ['id','name','pass','sections','itemPerms']);
+  sh.clearContents();
+  sh.appendRow(['id','name','pass','sections','itemPerms']);
+  dealers.forEach(d => sh.appendRow([d.id, d.name, String(d.pass), JSON.stringify(d.sections), JSON.stringify(d.itemPerms || {})]));
+  return { ok: true };
+}
+
+function saveAdmin(admin) {
+  const sh = getSheet('Admin', ['user','pass']);
+  sh.clearContents();
+  sh.appendRow(['user','pass']);
+  sh.appendRow([String(admin.user), String(admin.pass)]);
+  return { ok: true };
+}
+
+function saveSubmission(sub) {
+  const sh = getSheet('Submissions', ['key','dealer','dealerName','section','sectionName','itemIdx','item','status','remarks','date','time']);
+  const vals = sh.getDataRange().getValues();
+  for (let i = vals.length - 1; i >= 1; i--) {
+    if (vals[i][0] === sub.key) sh.deleteRow(i + 1);
+  }
+  sub.data.forEach((d, idx) => {
+    sh.appendRow([sub.key, sub.dealer, sub.dealerName, sub.section, sub.sectionName, idx+1, d.item, d.status, d.remarks, sub.date, sub.time]);
+  });
+  return { ok: true };
+}
+
+function clearSubmissions() {
+  const sh = SS.getSheetByName('Submissions');
+  if (sh) { sh.clearContents(); sh.appendRow(['key','dealer','dealerName','section','sectionName','itemIdx','item','status','remarks','date','time']); }
+  return { ok: true };
+}
+`.trim();
+
+function copyGASCode() {
+  navigator.clipboard.writeText(GAS_CODE).then(() => {
+    const btn = event.target;
+    btn.textContent = '✓ Copied!';
+    btn.style.color = 'var(--green)';
+    setTimeout(() => { btn.textContent = '📋 Copy Apps Script Code'; btn.style.color = 'var(--accent2)'; }, 2000);
+  });
+}
+
+async function connectSheets() {
+  const url = document.getElementById('gasUrlInput').value.trim();
+  const errEl = document.getElementById('sheetsConnectErr');
+  errEl.style.display = 'none';
+  if (!url || !url.includes('script.google.com')) {
+    errEl.textContent = 'Please enter a valid Google Apps Script Web App URL.';
+    errEl.style.display = 'block';
+    return;
+  }
+  const btn = event.target;
+  btn.textContent = 'Connecting…';
+  btn.disabled = true;
+  try {
+    const res = await gasGet('ping', url);
+    if (!res.ok) throw new Error('Connection failed');
+    GAS_URL = url;
+    sessionStorage.setItem(GAS_URL_KEY, GAS_URL);
+    document.getElementById('sheetsSetupOverlay').style.display = 'none';
+    await initApp();
+  } catch(e) {
+    errEl.textContent = 'Could not connect. Make sure the URL is correct and deployment is set to "Anyone".';
+    errEl.style.display = 'block';
+    btn.textContent = 'Connect & Continue';
+    btn.disabled = false;
+  }
+}
+
+async function gasGet(action, url) {
+  const base = url || GAS_URL;
+  const u = base + '?action=' + action + '&t=' + Date.now();
+  const res = await fetch(u, { redirect: 'follow' });
+  return res.json();
+}
+
+async function gasPost(body) {
+  // Primary: POST with JSON body to avoid GET URL length limits for large submissions.
+  // GAS doPost must be deployed (see updated Apps Script below).
+  // Falls back to GET-param encoding for small payloads if POST fails.
+  const u = GAS_URL + '?t=' + Date.now();
+  try {
+    const res = await fetch(u, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(body)
+    });
+    const json = await res.json();
+    if (!json || json.error) throw new Error(json && json.error ? json.error : 'POST failed');
+    return json;
+  } catch(postErr) {
+    console.warn('POST failed, falling back to GET encoding:', postErr);
+    const payload = encodeURIComponent(JSON.stringify(body));
+    const uFb = GAS_URL + '?action=' + body.action + '&payload=' + payload + '&t=' + Date.now();
+    const res = await fetch(uFb, { redirect: 'follow' });
+    return res.json();
+  }
+}
+
+/* ── DATA ── */
+const CHECKLISTS = [
+  {
+    name: "Dealer Compliance",
+    items: [
+      "Voice recording active","Client identity verified before trade","Margin checked before trade execution",
+      "Orders punched as per client instruction","No unauthorized trades executed",
+      "Client code verified before order entry","Suspicious trading activity reported",
+      "CCM requests documented properly","Terminal password secured",
+      "No use of personal mobile for orders","OMS/RMS connectivity verified",
+      "Pending orders reviewed","Trade confirmations verified",
+      "Dealer activity reconciled","Logged out from trading systems at EOD"
+    ]
+  },
+  {
+    name: "Back Office Ops",
+    items: [
+      "Contract notes generated and dispatched","Trade confirmations verified",
+      "Client ledger reconciliation completed","Bank reconciliation completed",
+      "Daily margin reporting completed","Client fund segregation verified",
+      "Pay-in/pay-out obligations checked","Settlement shortages monitored",
+      "Auction obligations reviewed","Client securities reconciliation completed",
+      "Running account settlement reviewed","Debit balance report checked",
+      "ECN/SMS delivery status verified","UCC upload status verified",
+      "Client code modifications updated","Pledge/re-pledge entries verified",
+      "DP balances reconciled","Suspense entries reviewed",
+      "Trade file uploads verified","Backup of operational data completed",
+      "Pending client requests reviewed","Operational exception register updated"
+    ]
+  },
+  {
+    name: "KYC Department",
+    items: [
+      "PAN verified","Aadhaar verified","CKYC/KRA validation completed","IPV completed",
+      "Mobile number verified","Email ID verified","Address proof verified","Bank proof verified",
+      "Income proof collected for derivatives","Photograph obtained","Signature verified",
+      "Nomination details updated","FATCA declaration obtained","PEP declaration checked",
+      "Risk disclosure documents accepted","UCC created and uploaded","AML screening completed",
+      "Sanction screening completed","Demat details verified","DDPI/POA verification completed",
+      "KYC records updated","Pending documentation reviewed"
+    ]
+  }
+];
+
+const DEALER_COLORS_LIST = ['var(--d1)','var(--d2)','var(--d3)','var(--accent)','var(--violet)','var(--amber)','var(--green)'];
+const DEALER_CSS_CLASSES = ['dp-d1','dp-d2','dp-d3','dp-d4','dp-d5','dp-d6','dp-d7'];
+
+// ── In-memory state (loaded from Sheets on startup) ──
+let dealerRegistry = {};
+let adminCreds = { user: 'admin', pass: 'admin123' };
+
+async function saveDealers() {
+  const arr = Object.entries(dealerRegistry).map(([id, d]) => ({
+    id,
+    name: d.name,
+    pass: d.pass,
+    sections: d.sections ?? [0,1,2],
+    itemPerms: d.itemPerms ?? {}
+  }));
+  await gasPost({ action: 'saveDealers', data: arr });
+}
+
+async function saveAdminCreds() {
+  await gasPost({ action: 'saveAdmin', data: adminCreds });
+}
+
+async function initApp() {
+  showLoadingOverlay(true);
+  try {
+    const all = await gasGet('getAll');
+
+    // Rebuild dealer registry
+    dealerRegistry = {};
+    (all.dealers || []).forEach(d => {
+      let sections = d.sections;
+      if (typeof sections === 'string') {
+        try { sections = JSON.parse(sections); } catch(e) { sections = [0,1,2]; }
+      }
+      dealerRegistry[d.id] = {
+        name: d.name,
+        pass: String(d.pass),
+        sections,
+        itemPerms: (() => {
+          if (!d.itemPerms) return {};
+          if (typeof d.itemPerms === 'string') {
+            try { return JSON.parse(d.itemPerms); } catch(e) { return {}; }
+          }
+          return d.itemPerms;
+        })()
+      };
+    });
+
+    // Rebuild admin creds
+    if (all.admin && all.admin.length) {
+      adminCreds = { user: all.admin[0].user, pass: all.admin[0].pass };
+    } else {
+      // First-time: push defaults
+      await saveAdminCreds();
+    }
+
+    // Rebuild submissions from Sheets rows
+    submissions = {};
+    (all.subs || []).forEach(row => {
+      const key = row.key;
+      if (!submissions[key]) {
+        submissions[key] = {
+          key,
+          dealer: row.dealer,
+          dealerName: row.dealerName,
+          section: Number(row.section),
+          sectionName: row.sectionName,
+          data: [],
+          time: row.time,
+          date: row.date
+        };
+      }
+      submissions[key].data.push({
+        item: row.item,
+        status: row.status,
+        remarks: row.remarks
+      });
+    });
+
+    refreshDealerMaps();
+    populateDealerSelect();
+  } catch(e) {
+    console.error('Init error', e);
+    showLoadingOverlay(false);
+    throw e; // re-throw so callers (.catch) can handle it
+  }
+  showLoadingOverlay(false);
+}
+
+function showLoadingOverlay(show) {
+  let el = document.getElementById('loadingOverlay');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'loadingOverlay';
+    el.style.cssText = 'position:fixed;inset:0;z-index:8888;background:rgba(10,11,15,0.85);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);flex-direction:column;gap:12px;';
+    el.innerHTML = '<div style="width:36px;height:36px;border:3px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite"></div><div style="font-size:13px;color:var(--text2)">Loading from Google Sheets…</div>';
+    const style = document.createElement('style');
+    style.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
+    document.head.appendChild(style);
+    document.body.appendChild(el);
+  }
+  el.style.display = show ? 'flex' : 'none';
+}
+
+function getDealerNames() {
+  const out = {};
+  Object.entries(dealerRegistry).forEach(([id, d]) => { out[id] = d.name; });
+  return out;
+}
+function getDealerClasses() {
+  const out = {}; let i = 0;
+  Object.keys(dealerRegistry).forEach(id => {
+    out[id] = DEALER_CSS_CLASSES[i % DEALER_CSS_CLASSES.length]; i++;
+  });
+  return out;
+}
+function getDealerColorsMap() {
+  const out = {}; let i = 0;
+  Object.keys(dealerRegistry).forEach(id => {
+    out[id] = DEALER_COLORS_LIST[i % DEALER_COLORS_LIST.length]; i++;
+  });
+  return out;
+}
+
+// Expose for legacy references
+let DEALER_NAMES   = getDealerNames();
+let DEALER_CLASSES = getDealerClasses();
+let DEALER_COLORS  = getDealerColorsMap();
+
+function refreshDealerMaps() {
+  DEALER_NAMES   = getDealerNames();
+  DEALER_CLASSES = getDealerClasses();
+  DEALER_COLORS  = getDealerColorsMap();
+}
+
+let currentDealer = null;
+let submissions = {};
+
+/* ── UTILS ── */
+function today() {
+  return new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+}
+function nowTime() {
+  return new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+}
+function greet() {
+  const h = new Date().getHours();
+  if (h < 12) return 'morning';
+  if (h < 17) return 'afternoon';
+  return 'evening';
+}
+function setView(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+/* ── LOGIN ROUTING ── */
+function showAdminLogin() { setView('adminLogin'); }
+function showDealerLogin() { populateDealerSelect(); setView('dealerLogin'); }
+
+/* ── DEALER AUTH ── */
+function populateDealerSelect() {
+  const sel = document.getElementById('dealerSelect');
+  sel.innerHTML = '<option value="">— select your dealer ID —</option>';
+  Object.entries(dealerRegistry).forEach(([id, d]) => {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = `${id} — ${d.name}`;
+    sel.appendChild(opt);
+  });
+}
+
+function dealerLogin() {
+  const sel  = document.getElementById('dealerSelect').value;
+  const pass = document.getElementById('dealerPass').value;
+  if (!sel)  { alert('Please select your dealer ID.'); return; }
+  const dealer = dealerRegistry[sel];
+  if (!dealer) { alert('Dealer not found.'); return; }
+  if (String(pass) !== String(dealer.pass)) { alert('Incorrect password.'); return; }
+  currentDealer = sel;
+  refreshDealerMaps();
+  const name = dealer.name;
+  const initials = name.split(' ').map(w=>w[0]).join('');
+  document.getElementById('dealerAvatar').textContent   = initials;
+  document.getElementById('dealerUname').textContent    = name;
+  document.getElementById('dealerUID').textContent      = sel;
+  document.getElementById('dealerWelcomeName').textContent = name.split(' ')[0];
+  document.getElementById('greeting').textContent       = greet();
+  document.getElementById('dealerSub').textContent      = `Fill in your assigned checklist sections for ${today()}.`;
+  document.getElementById('currentDate').textContent    = today();
+  renderChecklists();
+  setView('dealerDash');
+}
+
+function dealerLogout() {
+  currentDealer = null;
+  populateDealerSelect();
+  document.getElementById('dealerPass').value   = '';
+  setView('dealerLogin');
+}
+
+/* ── ADMIN AUTH ── */
+function adminLogin() {
+  const u = document.getElementById('adminUser').value;
+  const p = document.getElementById('adminPass').value;
+  if (String(u) !== String(adminCreds.user) || String(p) !== String(adminCreds.pass)) { alert('Invalid admin credentials.'); return; }
+  document.getElementById('adminDate').textContent = today();
+  renderAdmin();
+  setView('adminDash');
+}
+
+function adminLogout() {
+  document.getElementById('adminUser').value = '';
+  document.getElementById('adminPass').value = '';
+  setView('adminLogin');
+}
+
+/* ── BUILD CHECKLISTS ── */
+function renderChecklists() {
+  const dealer = dealerRegistry[currentDealer];
+  const assignedSections = dealer && dealer.sections ? dealer.sections : [0,1,2];
+
+  // Show/hide tabs based on assigned sections
+  document.querySelectorAll('.cl-tab').forEach((tab, i) => {
+    tab.style.display = assignedSections.includes(i) ? '' : 'none';
+  });
+  document.querySelectorAll('.checklist-section').forEach((sec, i) => {
+    sec.style.display = assignedSections.includes(i) ? '' : 'none';
+  });
+
+  // Switch to first assigned tab
+  const firstTab = assignedSections[0] ?? 0;
+  switchTab(firstTab);
+
+  CHECKLISTS.forEach((section, si) => {
+    if (!assignedSections.includes(si)) return;
+    const container = document.getElementById(`cl-${si}`);
+    container.innerHTML = '';
+    const perms = getItemPerms(dealer, si);
+    let visibleCount = 0;
+    section.items.forEach((item, idx) => {
+      if (!perms[idx]) return; // item not assigned to this dealer
+      visibleCount++;
+      const uid = `s${si}_i${idx}_${currentDealer}`;
+      const row = document.createElement('div');
+      row.className = 'cl-row';
+      row.id = `row-${uid}`;
+      row.innerHTML = `
+        <span class="cl-num">${String(visibleCount).padStart(2,'0')}</span>
+        <span class="cl-label">${item}</span>
+        <div class="col-status status-group">
+          <input type="radio" name="${uid}" value="completed" id="${uid}_c" class="status-radio" onchange="onStatusChange('${uid}',${si})">
+          <label for="${uid}_c" class="status-label"><span class="dot"></span>Completed</label>
+          <input type="radio" name="${uid}" value="partial" id="${uid}_p" class="status-radio" onchange="onStatusChange('${uid}',${si})">
+          <label for="${uid}_p" class="status-label"><span class="dot"></span>Partial</label>
+          <input type="radio" name="${uid}" value="notdone" id="${uid}_n" class="status-radio" onchange="onStatusChange('${uid}',${si})">
+          <label for="${uid}_n" class="status-label"><span class="dot"></span>Not Done</label>
+        </div>
+        <div class="col-remarks remarks-area">
+          <textarea class="remarks-input" id="rem-${uid}" placeholder="Add remark…" rows="1"
+            oninput="onRemarks('${uid}',${si})"></textarea>
+          <span class="remarks-hint" id="hint-${uid}"></span>
+        </div>`;
+      container.appendChild(row);
+    });
+    updateProgress(si);
+  });
+}
+
+function onStatusChange(uid, si) {
+  const sel   = document.querySelector(`input[name="${uid}"]:checked`);
+  const remEl = document.getElementById(`rem-${uid}`);
+  const hint  = document.getElementById(`hint-${uid}`);
+  if (!sel) return;
+  if (sel.value === 'partial' || sel.value === 'notdone') {
+    remEl.classList.add('mandatory');
+    hint.textContent  = '* Remarks required for this status.';
+    hint.className    = 'remarks-hint show required';
+  } else {
+    remEl.classList.remove('mandatory');
+    hint.textContent  = 'Optional: add a remark.';
+    hint.className    = 'remarks-hint show';
+  }
+  updateProgress(si);
+  updateOverallPct();
+}
+
+function onRemarks(uid, si) {
+  const sel   = document.querySelector(`input[name="${uid}"]:checked`);
+  const remEl = document.getElementById(`rem-${uid}`);
+  if (sel && (sel.value === 'partial' || sel.value === 'notdone')) {
+    if (remEl.value.trim()) remEl.classList.remove('mandatory');
+    else remEl.classList.add('mandatory');
+  }
+}
+
+function updateProgress(si) {
+  const dealer = dealerRegistry[currentDealer];
+  const perms  = dealer ? getItemPerms(dealer, si) : CHECKLISTS[si].items.map(() => true);
+  const enabledIdxs = CHECKLISTS[si].items.map((_, i) => i).filter(i => perms[i]);
+  const total  = enabledIdxs.length || 1;
+  let filled   = 0;
+  enabledIdxs.forEach(idx => {
+    const uid = `s${si}_i${idx}_${currentDealer}`;
+    if (document.querySelector(`input[name="${uid}"]:checked`)) filled++;
+  });
+  const pct = Math.round(filled / total * 100);
+  document.getElementById(`prog-fill-${si}`).style.width    = pct + '%';
+  document.getElementById(`prog-label-${si}`).textContent   = `${filled} of ${total} items filled`;
+  document.getElementById(`prog-pct-${si}`).textContent     = pct + '%';
+}
+
+function updateOverallPct() {
+  const dealer = dealerRegistry[currentDealer];
+  let total = 0, filled = 0;
+  CHECKLISTS.forEach((section, si) => {
+    const perms = dealer ? getItemPerms(dealer, si) : section.items.map(() => true);
+    section.items.forEach((_, idx) => {
+      if (!perms[idx]) return;
+      total++;
+      const uid = `s${si}_i${idx}_${currentDealer}`;
+      if (document.querySelector(`input[name="${uid}"]:checked`)) filled++;
+    });
+  });
+  const pct = total ? Math.round(filled / total * 100) : 0;
+  const el = document.getElementById('overallPct');
+  if (el) el.textContent = pct + '%';
+}
+
+function switchTab(idx) {
+  document.querySelectorAll('.cl-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
+  document.querySelectorAll('.checklist-section').forEach((s,i) => s.classList.toggle('active', i===idx));
+}
+
+async function submitSection(si) {
+  const section = CHECKLISTS[si];
+  const dealer  = dealerRegistry[currentDealer];
+  const perms   = dealer ? getItemPerms(dealer, si) : section.items.map(() => true);
+  let valid = true;
+  const data = [];
+
+  // Only collect items that are actually assigned to this dealer
+  section.items.forEach((item, idx) => {
+    if (!perms[idx]) return; // skip items not assigned
+    const uid   = `s${si}_i${idx}_${currentDealer}`;
+    const selEl = document.querySelector(`input[name="${uid}"]:checked`);
+    const remEl = document.getElementById(`rem-${uid}`);
+    const status  = selEl ? selEl.value : '';
+    const remarks = remEl ? remEl.value.trim() : '';
+    if (status === 'partial' || status === 'notdone') {
+      if (!remarks) { if (remEl) remEl.classList.add('mandatory'); valid = false; }
+    }
+    data.push({ item, status, remarks });
+  });
+
+  if (!valid) {
+    alert('⚠️ Please add mandatory remarks for all "Partial" and "Not Done" items.');
+    return;
+  }
+  if (!data.some(d => d.status)) {
+    alert('Please fill in at least some checklist items before submitting.');
+    return;
+  }
+  const key = `${currentDealer}_${si}`;
+  const sub = {
+    key,
+    dealer: currentDealer,
+    dealerName: DEALER_NAMES[currentDealer],
+    section: si,
+    sectionName: section.name,
+    data,
+    time: nowTime(),
+    date: today()
+  };
+  const btn = document.getElementById(`submit-btn-${si}`);
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+  try {
+    await gasPost({ action: 'saveSubmission', data: sub });
+    submissions[key] = sub;
+    document.getElementById(`submit-msg-${si}`).classList.add('show');
+    btn.textContent = '✓ Submitted';
+  } catch(e) {
+    alert('Failed to save to Google Sheets. Please try again.');
+    btn.disabled    = false;
+    btn.textContent = 'Submit Section';
+  }
+}
+
+/* ═══════════════════════════════
+  ADMIN RENDER
+═══════════════════════════════ */
+function switchPanel(id, el) {
+  document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`panel-${id}`).classList.add('active');
+  if (el) el.classList.add('active');
+  const titles = {
+    overview:    'Compliance Overview',
+    submissions: 'All Submissions',
+    dealers:     'Dealer Summary',
+    alerts:      'Risk Alerts',
+    manage:      'Manage Dealers',
+    history:     'Past Data'
+  };
+  document.getElementById('panelTitle').textContent = titles[id] || id;
+  if (id === 'history') loadHistoryData();
+  if (id === 'manage') renderClMgmt();
+}
+
+function renderAdmin() {
+  refreshDealerMaps();
+  refreshFilterDropdowns();
+  const allRows = buildRows();
+  const f = getFilters();
+  let rows = applyFilters(allRows, f);
+
+  // update badges
+  document.getElementById('subCountBadge').textContent = allRows.length;
+  renderKPIs(rows);
+  renderTable(rows);
+  renderDealerSummary();
+  renderCharts(allRows);
+  renderAlerts();
+  renderDealerManagement();
+}
+
+function refreshFilterDropdowns() {
+  const fd = document.getElementById('filterDealer');
+  if (!fd) return;
+  const prev = fd.value;
+  fd.innerHTML = '<option value="">All Dealers</option>';
+  Object.entries(dealerRegistry).forEach(([id, d]) => {
+    const opt = document.createElement('option');
+    opt.value = id; opt.textContent = `${id} — ${d.name}`;
+    fd.appendChild(opt);
+  });
+  fd.value = prev;
+}
+
+function buildRows() {
+  let rows = [];
+  Object.values(submissions).forEach(sub => {
+    sub.data.forEach((d, idx) => {
+      rows.push({
+        dealer: sub.dealer, dealerName: sub.dealerName,
+        section: sub.section, sectionName: sub.sectionName,
+        itemIdx: idx+1, item: d.item,
+        status: d.status, remarks: d.remarks,
+        time: sub.time, date: sub.date
+      });
+    });
+  });
+  return rows;
+}
+
+function getFilters() {
+  return {
+    dealer:  document.getElementById('filterDealer')?.value || '',
+    section: document.getElementById('filterSection')?.value || '',
+    status:  document.getElementById('filterStatus')?.value  || '',
+    search:  document.getElementById('searchInput')?.value.toLowerCase() || ''
+  };
+}
+
+function applyFilters(rows, f) {
+  if (f.dealer)  rows = rows.filter(r => r.dealer   === f.dealer);
+  if (f.section !== '') rows = rows.filter(r => r.section == f.section);
+  if (f.status)  rows = rows.filter(r => r.status   === f.status);
+  if (f.search)  rows = rows.filter(r => r.item.toLowerCase().includes(f.search));
+  return rows;
+}
+
+function renderKPIs(rows) {
+  const total   = rows.length;
+  const done    = rows.filter(r => r.status === 'completed').length;
+  const partial = rows.filter(r => r.status === 'partial').length;
+  const notdone = rows.filter(r => r.status === 'notdone').length;
+  const empty   = rows.filter(r => !r.status).length;
+  const pct     = total ? Math.round(done / total * 100) : 0;
+  document.getElementById('adminStats').innerHTML = `
+    <div class="kpi-card total">
+      <div class="kpi-label">Total Items</div>
+      <div class="kpi-value c-accent">${total}</div>
+      <div class="kpi-sub">across all dealers</div>
+    </div>
+    <div class="kpi-card done">
+      <div class="kpi-label">Completed</div>
+      <div class="kpi-value c-green">${done}</div>
+      <div class="kpi-sub">${pct}% completion rate</div>
+    </div>
+    <div class="kpi-card partial">
+      <div class="kpi-label">Partial Done</div>
+      <div class="kpi-value c-amber">${partial}</div>
+      <div class="kpi-sub">require follow-up</div>
+    </div>
+    <div class="kpi-card nd">
+      <div class="kpi-label">Not Done</div>
+      <div class="kpi-value c-red">${notdone}</div>
+      <div class="kpi-sub">flagged as risks</div>
+    </div>
+    <div class="kpi-card empty">
+      <div class="kpi-label">Not Filled</div>
+      <div class="kpi-value c-muted">${empty}</div>
+      <div class="kpi-sub">pending submission</div>
+    </div>
+  `;
+}
+
+function renderCharts(rows) {
+  /* Donut */
+  const total   = rows.length || 1;
+  const done    = rows.filter(r => r.status === 'completed').length;
+  const partial = rows.filter(r => r.status === 'partial').length;
+  const notdone = rows.filter(r => r.status === 'notdone').length;
+  const empty   = total - done - partial - notdone;
+
+  const segments = [
+    { val: done,    color: 'var(--green)', label: 'Completed' },
+    { val: partial, color: 'var(--amber)', label: 'Partial' },
+    { val: notdone, color: 'var(--red)',   label: 'Not Done' },
+    { val: empty,   color: 'var(--ink4)',  label: 'Not Filled' }
+  ];
+
+  const r = 50, cx = 60, cy = 60, strokeW = 16;
+  const circumf = 2 * Math.PI * r;
+  let offset = -circumf / 4; // start at top
+  let arcs = '';
+  segments.forEach(seg => {
+    const len = (seg.val / total) * circumf;
+    if (len > 0) {
+      arcs += `<circle cx="${cx}" cy="${cy}" r="${r}"
+        fill="none" stroke="${seg.color}" stroke-width="${strokeW}"
+        stroke-dasharray="${len} ${circumf - len}"
+        stroke-dashoffset="${-offset}"
+        style="transition:stroke-dasharray .5s ease"/>`;
+      offset += len;
+    }
+  });
+  document.getElementById('donutSvg').innerHTML =
+    `<circle cx="60" cy="60" r="50" fill="none" stroke="var(--ink4)" stroke-width="16"/>` + arcs +
+    `<text x="60" y="55" text-anchor="middle" font-size="18" font-weight="700" fill="var(--text)" font-family="JetBrains Mono">${total}</text>
+     <text x="60" y="70" text-anchor="middle" font-size="9" fill="var(--text3)" font-family="Inter">items</text>`;
+
+  document.getElementById('donutLegend').innerHTML = segments.filter(s=>s.val>0).map(s => `
+    <div class="legend-item">
+      <div class="legend-dot" style="background:${s.color}"></div>
+      <span class="legend-label">${s.label}</span>
+      <span class="legend-val">${s.val}</span>
+    </div>`).join('');
+
+  /* Dealer bars */
+  const dealers = Object.keys(DEALER_NAMES);
+  document.getElementById('dealerBars').innerHTML = dealers.map(did => {
+    const subs = Object.values(submissions).filter(s => s.dealer === did);
+    let tot = 0, comp = 0;
+    subs.forEach(s => s.data.forEach(d => {
+      tot++;
+      if (d.status === 'completed') comp++;
+    }));
+    const pct = tot ? Math.round(comp / tot * 100) : 0;
+    const color = DEALER_COLORS[did];
+    return `
+      <div class="mini-bar-row">
+        <div class="mini-bar-label">
+          <span>${DEALER_NAMES[did]}</span>
+          <span style="font-family:'JetBrains Mono',monospace;color:var(--text)">${pct}%</span>
+        </div>
+        <div class="mini-bar-track">
+          <div class="mini-bar-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function statusChip(s) {
+  if (!s) return '<span class="status-chip sc-empty">—</span>';
+  const map = {
+    completed: ['sc-completed','✓ Completed'],
+    partial:   ['sc-partial',  '◑ Partial'],
+    notdone:   ['sc-notdone',  '✕ Not Done']
+  };
+  const [cls, label] = map[s] || ['sc-empty', s];
+  return `<span class="status-chip ${cls}">${label}</span>`;
+}
+
+function renderTable(rows) {
+  const tbody = document.getElementById('adminTableBody');
+  const cnt   = document.getElementById('tableCount');
+  if (cnt) cnt.textContent = `${rows.length} record${rows.length !== 1 ? 's' : ''}`;
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="7">
+      <div class="no-data">
+        <div class="no-data-icon">📋</div>
+        <strong>No submissions found</strong>
+        <p>Submissions will appear here once dealers fill their checklists.</p>
+      </div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>
+        <span class="dealer-pill ${DEALER_CLASSES[r.dealer] || ''}">${r.dealer}</span>
+        <div class="dealer-name">${r.dealerName}</div>
+      </td>
+      <td><span class="section-chip">${r.sectionName}</span></td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)">${String(r.itemIdx).padStart(2,'0')}</td>
+      <td style="font-size:13px">${r.item}</td>
+      <td>${statusChip(r.status)}</td>
+      <td class="remarks-cell">${r.remarks || '<span style="color:var(--text4)">—</span>'}</td>
+      <td class="time-cell">${r.date}<br>${r.time}</td>
+    </tr>`).join('');
+}
+
+function renderDealerSummary() {
+  const grid    = document.getElementById('dealerSummaryGrid');
+  const dealers = Object.keys(DEALER_NAMES);
+  grid.innerHTML = dealers.map(did => {
+    const subs = Object.values(submissions).filter(s => s.dealer === did);
+    if (!subs.length) return `
+      <div class="ds-card">
+        <div class="ds-card-top">
+          <span class="dealer-pill ${DEALER_CLASSES[did]}">${did}</span>
+          <span class="ds-time">No submission</span>
+        </div>
+        <div class="ds-name">${DEALER_NAMES[did]}</div>
+        <div class="ds-bar"><div class="ds-seg" style="width:100%;background:var(--ink4)"></div></div>
+        <div style="font-size:12px;color:var(--text3)">No checklists submitted today.</div>
+      </div>`;
+    let comp=0, part=0, nd=0, tot=0;
+    subs.forEach(s => s.data.forEach(d => {
+      tot++;
+      if (d.status==='completed') comp++;
+      else if (d.status==='partial') part++;
+      else if (d.status==='notdone') nd++;
+    }));
+    const pComp = tot ? Math.round(comp/tot*100) : 0;
+    const pPart = tot ? Math.round(part/tot*100) : 0;
+    const pNd   = tot ? Math.round(nd/tot*100)   : 0;
+    const last  = subs[subs.length-1];
+    const sections = subs.map(s => s.sectionName).join(' · ');
+    return `
+      <div class="ds-card">
+        <div class="ds-card-top">
+          <span class="dealer-pill ${DEALER_CLASSES[did]}">${did}</span>
+          <span class="ds-time">${last.time}</span>
+        </div>
+        <div class="ds-name">${DEALER_NAMES[did]}</div>
+        <div class="ds-bar">
+          <div class="ds-seg" style="width:${pComp}%;background:var(--green)"></div>
+          <div class="ds-seg" style="width:${pPart}%;background:var(--amber)"></div>
+          <div class="ds-seg" style="width:${pNd}%;background:var(--red)"></div>
+        </div>
+        <div class="ds-counts">
+          <div class="ds-count"><div class="ds-dot" style="background:var(--green)"></div>${comp} done</div>
+          <div class="ds-count"><div class="ds-dot" style="background:var(--amber)"></div>${part} partial</div>
+          <div class="ds-count"><div class="ds-dot" style="background:var(--red)"></div>${nd} not done</div>
+        </div>
+        <div class="ds-meta">
+          <span>${subs.length} section(s) · ${tot} items</span>
+          <span>${pComp}% complete</span>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px">${sections}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderAlerts() {
+  const alerts = [];
+  Object.values(submissions).forEach(sub => {
+    sub.data.forEach(d => {
+      if (d.status === 'notdone') {
+        alerts.push({
+          severity: 'high',
+          title: `Not Done: "${d.item}"`,
+          desc: `Dealer ${sub.dealer} (${sub.dealerName}) — ${sub.sectionName}${d.remarks ? ' — Remark: ' + d.remarks : ''}`,
+          time: sub.time
+        });
+      } else if (d.status === 'partial') {
+        alerts.push({
+          severity: 'med',
+          title: `Partial Completion: "${d.item}"`,
+          desc: `Dealer ${sub.dealer} (${sub.dealerName}) — ${sub.sectionName}${d.remarks ? ' — Remark: ' + d.remarks : ''}`,
+          time: sub.time
+        });
+      }
+    });
+    // check missing sections
+  });
+
+  // Check dealers who haven't submitted at all
+  Object.keys(DEALER_NAMES).forEach(did => {
+    const hasSub = Object.values(submissions).some(s => s.dealer === did);
+    if (!hasSub) {
+      alerts.push({
+        severity: 'low',
+        title: `No Submission: ${DEALER_NAMES[did]} (${did})`,
+        desc: 'This dealer has not submitted any checklist sections today.',
+        time: '—'
+      });
+    }
+  });
+
+  document.getElementById('alertCountBadge').textContent = alerts.filter(a=>a.severity==='high').length;
+
+  const sevClass = { high:'sev-high severity-high', med:'sev-med severity-med', low:'sev-low severity-low' };
+  const sevLabel = { high:'HIGH', med:'MEDIUM', low:'INFO' };
+
+  document.getElementById('alertsList').innerHTML = alerts.length
+    ? alerts.map(a => `
+        <div class="alert-row ${a.severity === 'high' ? 'severity-high' : a.severity === 'med' ? 'severity-med' : 'severity-low'}">
+          <span class="alert-sev ${sevClass[a.severity]}">${sevLabel[a.severity]}</span>
+          <div class="alert-body">
+            <strong>${a.title}</strong>
+            <p>${a.desc}</p>
+          </div>
+          <span class="alert-time">${a.time}</span>
+        </div>`).join('')
+    : `<div class="no-data"><div class="no-data-icon">✅</div><strong>No alerts</strong><p>All submissions are clean.</p></div>`;
+
+  // also render alert ribbon on overview
+  const highAlerts = alerts.filter(a => a.severity === 'high');
+  const ribbon = document.getElementById('alertRibbon');
+  if (ribbon && highAlerts.length > 0) {
+    ribbon.innerHTML = `
+      <div class="alert-card">
+        <div class="alert-icon">⚠️</div>
+        <div class="alert-text">
+          <strong>${highAlerts.length} High-Severity Compliance Flag${highAlerts.length > 1 ? 's' : ''}</strong>
+          <p>${highAlerts.slice(0,2).map(a=>a.title).join(', ')}${highAlerts.length > 2 ? ` +${highAlerts.length-2} more` : ''}</p>
+        </div>
+      </div>`;
+  } else if (ribbon) {
+    ribbon.innerHTML = '';
+  }
+}
+
+/* ═══════════════════════════════
+  DEALER MANAGEMENT (ADMIN)
+═══════════════════════════════ */
+async function addDealer() {
+  const id   = document.getElementById('newDealerID').value.trim().toUpperCase();
+  const name = document.getElementById('newDealerName').value.trim();
+  const pass = document.getElementById('newDealerPass').value;
+  if (!id)   { alert('Please enter a Dealer ID.'); return; }
+  if (!name) { alert('Please enter the dealer\'s full name.'); return; }
+  if (!pass) { alert('Please set a password for this dealer.'); return; }
+  if (dealerRegistry[id]) { alert(`Dealer ${id} already exists.`); return; }
+  dealerRegistry[id] = { name, pass, sections: [0,1,2] };
+  await saveDealers();
+  document.getElementById('newDealerID').value   = '';
+  document.getElementById('newDealerName').value = '';
+  document.getElementById('newDealerPass').value = '';
+  renderAdmin();
+  alert(`✓ Dealer ${id} (${name}) added successfully.`);
+}
+
+async function removeDealer(id) {
+  if (!confirm(`Remove dealer ${id} — ${dealerRegistry[id]?.name}? This cannot be undone.`)) return;
+  delete dealerRegistry[id];
+  // Remove their submissions too
+  Object.keys(submissions).forEach(k => { if (k.startsWith(id + '_')) delete submissions[k]; });
+  await saveDealers();
+  renderAdmin();
+}
+
+async function toggleSection(dealerId, secIdx) {
+  const dealer = dealerRegistry[dealerId];
+  if (!dealer) return;
+  if (!dealer.sections) dealer.sections = [0,1,2];
+  const idx = dealer.sections.indexOf(secIdx);
+  if (idx === -1) dealer.sections.push(secIdx);
+  else dealer.sections.splice(idx, 1);
+  dealer.sections.sort();
+  await saveDealers();
+  renderDealerManagement();
+}
+
+/* ── Item-level permissions ── */
+function getItemPerms(dealer, si) {
+  // dealer.itemPerms: { [si]: [true,true,false,...] }
+  if (!dealer.itemPerms) dealer.itemPerms = {};
+  if (!dealer.itemPerms[si]) {
+    dealer.itemPerms[si] = CHECKLISTS[si].items.map(() => true);
+  }
+  // Ensure array length matches checklist
+  while (dealer.itemPerms[si].length < CHECKLISTS[si].items.length) dealer.itemPerms[si].push(true);
+  return dealer.itemPerms[si];
+}
+
+function openItemPermsModal(dealerId, si) {
+  const dealer = dealerRegistry[dealerId];
+  const sectionName = CHECKLISTS[si].name;
+  const items = CHECKLISTS[si].items;
+  const perms = getItemPerms(dealer, si);
+
+  // Remove existing modal
+  const old = document.getElementById('itemPermsModal');
+  if (old) old.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'itemPermsModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(10,11,15,0.88);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);padding:1rem';
+  modal.onclick = e => { if (e.target === modal) closeItemPermsModal(); };
+
+  const allChecked = perms.every(Boolean);
+
+  modal.innerHTML = `
+    <div style="background:var(--ink2);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden">
+      <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700">${sectionName}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">Item access for <strong style="color:var(--text2)">${dealer.name}</strong> (${dealerId})</div>
+        </div>
+        <button onclick="closeItemPermsModal()" style="background:var(--glass);border:1px solid var(--border2);border-radius:8px;padding:5px 10px;font-size:13px;color:var(--text2);cursor:pointer;font-family:inherit">✕</button>
+      </div>
+
+      <div style="padding:0.75rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+          <input type="checkbox" id="selectAllItems_${dealerId}_${si}" ${allChecked ? 'checked' : ''}
+            onchange="toggleAllItems('${dealerId}',${si},this.checked)"
+            style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer">
+          <span style="font-size:12px;font-weight:600;color:var(--text2)">Select All Items</span>
+        </label>
+        <span style="font-size:11px;color:var(--text3);margin-left:auto" id="itemCountLabel_${dealerId}_${si}">${perms.filter(Boolean).length} of ${items.length} enabled</span>
+      </div>
+
+      <div style="overflow-y:auto;padding:0.5rem 1rem">
+        ${items.map((item, idx) => `
+          <label style="display:flex;align-items:flex-start;gap:10px;padding:8px 6px;border-radius:8px;cursor:pointer;transition:background .1s;border-bottom:1px solid var(--border)"
+            onmouseover="this.style.background='var(--glass)'" onmouseout="this.style.background='transparent'">
+            <input type="checkbox" id="itemperm_${dealerId}_${si}_${idx}" ${perms[idx] ? 'checked' : ''}
+              onchange="toggleItemPerm('${dealerId}',${si},${idx},this.checked)"
+              style="width:14px;height:14px;margin-top:2px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">
+            <span style="font-size:12px;line-height:1.5;color:${perms[idx] ? 'var(--text)' : 'var(--text3)'}">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text4);margin-right:6px">${String(idx+1).padStart(2,'0')}</span>
+              ${item}
+            </span>
+          </label>`).join('')}
+      </div>
+
+      <div style="padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0">
+        <button onclick="closeItemPermsModal()" style="padding:8px 18px;background:var(--glass);border:1px solid var(--border2);border-radius:8px;font-size:13px;font-family:inherit;color:var(--text2);cursor:pointer">Cancel</button>
+        <button onclick="saveItemPerms('${dealerId}',${si})" style="padding:8px 18px;background:var(--accent);border:none;border-radius:8px;font-size:13px;font-weight:600;font-family:inherit;color:#fff;cursor:pointer">Save Changes</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function closeItemPermsModal() {
+  const m = document.getElementById('itemPermsModal');
+  if (m) m.remove();
+}
+
+function toggleItemPerm(dealerId, si, idx, checked) {
+  const dealer = dealerRegistry[dealerId];
+  const perms = getItemPerms(dealer, si);
+  perms[idx] = checked;
+  // Update label color inline
+  const lbl = document.querySelector(`#itemperm_${dealerId}_${si}_${idx}`)?.closest('label')?.querySelector('span:last-child');
+  if (lbl) lbl.style.color = checked ? 'var(--text)' : 'var(--text3)';
+  // Update count label
+  const countEl = document.getElementById(`itemCountLabel_${dealerId}_${si}`);
+  if (countEl) countEl.textContent = `${perms.filter(Boolean).length} of ${CHECKLISTS[si].items.length} enabled`;
+  // Update select-all checkbox state
+  const allBox = document.getElementById(`selectAllItems_${dealerId}_${si}`);
+  if (allBox) allBox.checked = perms.every(Boolean);
+}
+
+function toggleAllItems(dealerId, si, checked) {
+  const dealer = dealerRegistry[dealerId];
+  const perms = getItemPerms(dealer, si);
+  perms.forEach((_, i) => { perms[i] = checked; });
+  // Update all checkboxes
+  CHECKLISTS[si].items.forEach((_, idx) => {
+    const cb = document.getElementById(`itemperm_${dealerId}_${si}_${idx}`);
+    if (cb) { cb.checked = checked; }
+    const lbl = cb?.closest('label')?.querySelector('span:last-child');
+    if (lbl) lbl.style.color = checked ? 'var(--text)' : 'var(--text3)';
+  });
+  const countEl = document.getElementById(`itemCountLabel_${dealerId}_${si}`);
+  if (countEl) countEl.textContent = `${perms.filter(Boolean).length} of ${CHECKLISTS[si].items.length} enabled`;
+}
+
+async function saveItemPerms(dealerId, si) {
+  const dealer = dealerRegistry[dealerId];
+  // perms already updated in-memory by toggleItemPerm/toggleAllItems
+  // Make sure itemPerms object is set
+  if (!dealer.itemPerms) dealer.itemPerms = {};
+  await saveDealers();
+  closeItemPermsModal();
+  renderDealerManagement();
+}
+
+async function updateDealerPassword(id) {
+  const input = document.getElementById(`pass_${id}`);
+  const newPass = input ? input.value.trim() : '';
+  if (!newPass) { alert('Password cannot be empty.'); return; }
+  dealerRegistry[id].pass = newPass;
+  await saveDealers();
+  input.value = '';
+  alert(`✓ Password updated for ${dealerRegistry[id].name}.`);
+}
+
+function renderDealerManagement() {
+  const tbody = document.getElementById('dealerMgmtBody');
+  const cnt   = document.getElementById('dealerMgmtCount');
+  const dealers = Object.entries(dealerRegistry);
+  if (cnt) cnt.textContent = `${dealers.length} dealer${dealers.length !== 1 ? 's' : ''}`;
+  if (!dealers.length) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="no-data"><div class="no-data-icon">👤</div><strong>No dealers registered</strong><p>Add your first dealer using the form above.</p></div></td></tr>`;
+    return;
+  }
+  const sectionNames = ['Dealer Compliance', 'Back Office Ops', 'KYC Department'];
+  tbody.innerHTML = dealers.map(([id, d]) => {
+    const sections = d.sections ?? [0,1,2];
+    const sectionBtns = sectionNames.map((sn, si) => {
+      const active = sections.includes(si);
+      const perms = getItemPerms(d, si);
+      const enabledCount = perms.filter(Boolean).length;
+      const totalCount   = CHECKLISTS[si].items.length;
+      const allEnabled   = enabledCount === totalCount;
+
+      return `
+        <div style="display:inline-flex;align-items:center;gap:0;margin:2px;border-radius:20px;overflow:hidden;border:1px solid ${active ? 'rgba(59,123,255,0.4)' : 'var(--border2)'}">
+          <button onclick="toggleSection('${id}',${si})" style="
+            padding:4px 10px;font-size:11px;font-weight:500;cursor:pointer;
+            font-family:inherit;border:none;border-right:1px solid ${active ? 'rgba(59,123,255,0.25)' : 'var(--border)'};
+            background:${active ? 'var(--accent-dim)' : 'var(--glass)'};
+            color:${active ? 'var(--accent2)' : 'var(--text3)'};transition:all .12s;"
+          >${active ? '✓' : '+'} ${sn}</button>
+          ${active ? `
+          <button onclick="openItemPermsModal('${id}',${si})" title="Configure which items this dealer sees" style="
+            padding:4px 8px;font-size:10px;font-weight:600;cursor:pointer;
+            font-family:'JetBrains Mono',monospace;border:none;
+            background:${allEnabled ? 'var(--accent-dim)' : 'rgba(245,158,11,0.12)'};
+            color:${allEnabled ? 'var(--accent2)' : 'var(--amber)'};transition:all .12s;white-space:nowrap"
+          >${enabledCount}/${totalCount} ✎</button>` : ''}
+        </div>`;
+    }).join('');
+    return `<tr>
+      <td><span class="dealer-pill ${DEALER_CLASSES[id] || 'dp-d1'}">${id}</span></td>
+      <td style="font-weight:500">${d.name}</td>
+      <td>${sectionBtns}</td>
+      <td>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="password" id="pass_${id}" placeholder="New password…" class="search-input" style="min-width:130px;font-size:12px">
+          <button class="btn-sm" onclick="updateDealerPassword('${id}')" style="white-space:nowrap;color:var(--accent2)">Set</button>
+        </div>
+      </td>
+      <td>
+        <button class="btn-sm" onclick="removeDealer('${id}')" style="color:var(--red);border-color:rgba(239,68,68,0.3)">Remove</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+/* EXPORT CSV */
+function exportCSV() {
+  const rows = buildRows();
+  if (!rows.length) { alert('No data to export.'); return; }
+  const headers = ['Dealer ID','Dealer Name','Section','Item #','Checklist Item','Status','Remarks','Date','Time'];
+  const csv = [
+    headers.join(','),
+    ...rows.map(r => [
+      r.dealer, r.dealerName, r.sectionName, r.itemIdx,
+      `"${r.item.replace(/"/g,'""')}"`,
+      r.status || '',
+      `"${(r.remarks||'').replace(/"/g,'""')}"`,
+      r.date, r.time
+    ].join(','))
+  ].join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `nbs_compliance_${today().replace(/ /g,'_')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ══════════════════════════════════════════════════════
+   PAST DATA — HISTORY PANEL
+══════════════════════════════════════════════════════ */
+
+let histAllRows   = [];   // all rows fetched from Sheets (ever)
+let histFiltered  = [];   // after filter applied
+let histCurrentPage = 1;
+const HIST_PAGE_SIZE = 50;
+
+/* Called once on init — pull full Submissions sheet then seed year picker */
+async function loadHistoryData() {
+  try {
+    const all = await gasGet('getAll');
+    const subs = all.subs || [];
+
+    // Build flat rows from Submissions sheet
+    histAllRows = subs.map(row => ({
+      date:       String(row.date   || '').trim(),
+      dealer:     String(row.dealer || '').trim(),
+      dealerName: String(row.dealerName || '').trim(),
+      section:    String(row.section || '').trim(),
+      sectionName:String(row.sectionName || '').trim(),
+      itemIdx:    row.itemIdx,
+      item:       String(row.item   || '').trim(),
+      status:     String(row.status || '').trim(),
+      remarks:    String(row.remarks|| '').trim(),
+      time:       String(row.time   || '').trim(),
+    }));
+
+    initHistoryFilters();
+  } catch(e) {
+    console.warn('loadHistoryData failed:', e);
+  }
+}
+
+function initHistoryFilters() {
+  // Year picker — current year back 5
+  const yearSel = document.getElementById('histYear');
+  if (!yearSel) return;
+  const curYear = new Date().getFullYear();
+  yearSel.innerHTML = '<option value="">All Years</option>';
+  for (let y = curYear; y >= curYear - 4; y--) {
+    yearSel.innerHTML += `<option value="${y}">${y}</option>`;
+  }
+
+  // Dealer picker from registry
+  const dealerSel = document.getElementById('histDealer');
+  if (dealerSel) {
+    dealerSel.innerHTML = '<option value="">All Dealers</option>';
+    Object.entries(dealerRegistry).forEach(([id, d]) => {
+      dealerSel.innerHTML += `<option value="${id}">${d.name} (${id})</option>`;
+    });
+  }
+
+  renderHistory();
+}
+
+function clearHistoryFilters() {
+  ['histYear','histMonth','histDealer','histSection','histStatus'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  histCurrentPage = 1;
+  renderHistory();
+}
+
+function histPage(delta) {
+  const totalPages = Math.ceil(histFiltered.length / HIST_PAGE_SIZE);
+  histCurrentPage = Math.max(1, Math.min(totalPages || 1, histCurrentPage + delta));
+  renderHistoryTable();
+}
+
+function renderHistory() {
+  histCurrentPage = 1;
+  const year    = document.getElementById('histYear')   ?.value || '';
+  const month   = document.getElementById('histMonth')  ?.value || '';
+  const dealer  = document.getElementById('histDealer') ?.value || '';
+  const section = document.getElementById('histSection')?.value || '';
+  const status  = document.getElementById('histStatus') ?.value || '';
+
+  histFiltered = histAllRows.filter(r => {
+    // date format: "DD Mon YYYY" e.g. "02 Jun 2026"
+    if (year && !r.date.includes(year))  return false;
+    if (month) {
+      const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const mName = monthNames[parseInt(month,10)-1];
+      if (!r.date.includes(mName)) return false;
+    }
+    if (dealer  && r.dealer  !== dealer)            return false;
+    if (section && r.section !== section)           return false;
+    if (status  && r.status  !== status)            return false;
+    return true;
+  });
+
+  // Sort by date desc, then time desc
+  histFiltered.sort((a,b) => {
+    const da = parseDMY(a.date), db = parseDMY(b.date);
+    if (db - da !== 0) return db - da;
+    return (b.time || '').localeCompare(a.time || '');
+  });
+
+  renderHistoryKPIs();
+  renderHistoryTrend();
+  renderHistoryTable();
+
+  // Update range label
+  const rangeEl = document.getElementById('histTrendRange');
+  if (rangeEl) {
+    const label = [
+      year || 'All Years',
+      month ? ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(month,10)] : '',
+      dealer ? (dealerRegistry[dealer]?.name || dealer) : '',
+    ].filter(Boolean).join(' · ');
+    rangeEl.textContent = label || 'All Records';
+  }
+}
+
+function parseDMY(str) {
+  // "02 Jun 2026" → Date
+  if (!str) return new Date(0);
+  const parts = str.trim().split(' ');
+  if (parts.length === 3) {
+    return new Date(`${parts[1]} ${parts[0]} ${parts[2]}`);
+  }
+  return new Date(str);
+}
+
+function renderHistoryKPIs() {
+  const strip = document.getElementById('histKpiStrip');
+  if (!strip) return;
+
+  const rows = histFiltered;
+  const total = rows.length;
+  const completed = rows.filter(r => r.status === 'completed').length;
+  const partial   = rows.filter(r => r.status === 'partial').length;
+  const notdone   = rows.filter(r => r.status === 'notdone').length;
+  const compRate  = total ? Math.round(completed / total * 100) : 0;
+
+  // Unique submission days
+  const days = new Set(rows.map(r => r.date)).size;
+
+  // Unique dealers who submitted in filtered range
+  const activeDealers = new Set(rows.map(r => r.dealer)).size;
+
+  strip.innerHTML = [
+    { label: 'Total Records',    value: total.toLocaleString(),       sub: `across ${days} day${days!==1?'s':''}`,  color: 'var(--accent2)' },
+    { label: 'Completion Rate',  value: compRate + '%',               sub: `${completed} completed items`,          color: compRate >= 80 ? 'var(--green)' : compRate >= 50 ? 'var(--amber)' : 'var(--red)' },
+    { label: 'Partial Done',     value: partial.toLocaleString(),     sub: `${total ? Math.round(partial/total*100) : 0}% of records`, color: 'var(--amber)' },
+    { label: 'Not Done',         value: notdone.toLocaleString(),     sub: `${total ? Math.round(notdone/total*100) : 0}% of records`, color: 'var(--red)' },
+    { label: 'Active Dealers',   value: activeDealers,                sub: `out of ${Object.keys(dealerRegistry).length} registered`, color: 'var(--violet)' },
+  ].map(k => `
+    <div class="history-kpi">
+      <div class="history-kpi-label">${k.label}</div>
+      <div class="history-kpi-value" style="color:${k.color}">${k.value}</div>
+      <div class="history-kpi-sub">${k.sub}</div>
+    </div>
+  `).join('');
+}
+
+function renderHistoryTrend() {
+  const container = document.getElementById('histDealerTrend');
+  if (!container) return;
+
+  const rows = histFiltered;
+  if (!rows.length) {
+    container.innerHTML = '<div class="hist-no-data">No data for selected filters.</div>';
+    return;
+  }
+
+  // Per-dealer stats
+  const dealerStats = {};
+  rows.forEach(r => {
+    if (!dealerStats[r.dealer]) dealerStats[r.dealer] = { name: r.dealerName || r.dealer, total: 0, completed: 0, partial: 0, notdone: 0 };
+    const ds = dealerStats[r.dealer];
+    ds.total++;
+    if (r.status === 'completed') ds.completed++;
+    else if (r.status === 'partial') ds.partial++;
+    else if (r.status === 'notdone') ds.notdone++;
+  });
+
+  const DEALER_COLORS = ['var(--d1)','var(--d2)','var(--d3)','var(--accent2)','var(--violet)'];
+
+  container.innerHTML = Object.entries(dealerStats).map(([id, ds], i) => {
+    const compPct   = ds.total ? Math.round(ds.completed / ds.total * 100) : 0;
+    const partPct   = ds.total ? Math.round(ds.partial   / ds.total * 100) : 0;
+    const notPct    = ds.total ? Math.round(ds.notdone   / ds.total * 100) : 0;
+    const color     = compPct >= 80 ? 'var(--green)' : compPct >= 50 ? 'var(--amber)' : 'var(--red)';
+
+    return `
+      <div style="margin-bottom:18px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="dealer-pill ${DEALER_CLASSES[id] || 'dp-d1'}" style="font-size:10px;padding:2px 8px">${id}</span>
+            <span style="font-size:12px;font-weight:500;color:var(--text)">${ds.name}</span>
+          </div>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:${color}">${compPct}% complete</span>
+        </div>
+        <!-- Stacked bar: green / amber / red -->
+        <div style="height:10px;background:var(--ink4);border-radius:5px;overflow:hidden;display:flex">
+          <div style="width:${compPct}%;background:var(--green);transition:width .4s"></div>
+          <div style="width:${partPct}%;background:var(--amber);transition:width .4s"></div>
+          <div style="width:${notPct}%;background:var(--red);transition:width .4s"></div>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:5px">
+          <span style="font-size:10px;color:var(--green)">✓ ${ds.completed} done</span>
+          <span style="font-size:10px;color:var(--amber)">~ ${ds.partial} partial</span>
+          <span style="font-size:10px;color:var(--red)">✗ ${ds.notdone} not done</span>
+          <span style="font-size:10px;color:var(--text3);margin-left:auto">${ds.total} records</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderHistoryTable() {
+  const tbody = document.getElementById('histTableBody');
+  const countEl = document.getElementById('histTableCount');
+  const pageInfoEl = document.getElementById('histPageInfo');
+  const prevBtn = document.getElementById('histPrevBtn');
+  const nextBtn = document.getElementById('histNextBtn');
+  if (!tbody) return;
+
+  const total = histFiltered.length;
+  const totalPages = Math.max(1, Math.ceil(total / HIST_PAGE_SIZE));
+  histCurrentPage = Math.min(histCurrentPage, totalPages);
+
+  const start = (histCurrentPage - 1) * HIST_PAGE_SIZE;
+  const pageRows = histFiltered.slice(start, start + HIST_PAGE_SIZE);
+
+  if (countEl) countEl.textContent = `${total.toLocaleString()} records`;
+  if (pageInfoEl) pageInfoEl.textContent = `Page ${histCurrentPage} of ${totalPages}`;
+  if (prevBtn) prevBtn.disabled = histCurrentPage <= 1;
+  if (nextBtn) nextBtn.disabled = histCurrentPage >= totalPages;
+
+  if (!pageRows.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="no-data"><div class="no-data-icon">📅</div><strong>No historical data found</strong><p>Adjust your filters or submit checklists to build history.</p></div></td></tr>`;
+    return;
+  }
+
+  const STATUS_MAP = {
+    completed: { label: 'Completed', cls: 'status-pill-green' },
+    partial:   { label: 'Partial',   cls: 'status-pill-amber' },
+    notdone:   { label: 'Not Done',  cls: 'status-pill-red'   },
+  };
+
+  tbody.innerHTML = pageRows.map(r => {
+    const s = STATUS_MAP[r.status] || { label: r.status || '—', cls: '' };
+    return `<tr>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;white-space:nowrap">${r.date || '—'}</td>
+      <td><span class="dealer-pill ${DEALER_CLASSES[r.dealer] || 'dp-d1'}" style="font-size:10px">${r.dealer}</span> <span style="font-size:12px">${r.dealerName}</span></td>
+      <td style="font-size:11px;color:var(--text2)">${r.sectionName || '—'}</td>
+      <td style="font-size:11px;max-width:240px">${r.item || '—'}</td>
+      <td><span class="${s.cls}" style="font-size:10px;padding:2px 8px;border-radius:20px;white-space:nowrap">${s.label}</span></td>
+      <td style="font-size:11px;color:var(--text2);max-width:180px;word-break:break-word">${r.remarks || '—'}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)">${r.time || '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── Auto-refresh for admin dashboard ── */
+let _autoRefreshTimer = null;
+const AUTO_REFRESH_MS = 60000; // 60 seconds
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+  _autoRefreshTimer = setInterval(async () => {
+    // Only auto-refresh when admin dashboard is visible
+    const adminDash = document.getElementById('adminDash');
+    if (!adminDash || !adminDash.classList.contains('active')) return;
+    try {
+      const all = await gasGet('getAll');
+      // Rebuild submissions from latest Sheets data
+      submissions = {};
+      (all.subs || []).forEach(row => {
+        const key = row.key;
+        if (!submissions[key]) {
+          submissions[key] = {
+            key,
+            dealer: row.dealer,
+            dealerName: row.dealerName,
+            section: Number(row.section),
+            sectionName: row.sectionName,
+            data: [],
+            time: row.time,
+            date: row.date
+          };
+        }
+        submissions[key].data.push({ item: row.item, status: row.status, remarks: row.remarks });
+      });
+      renderAdmin();
+      // Briefly flash the LIVE label to signal auto-refresh fired
+      const liveLabel = document.querySelector('.live-label');
+      if (liveLabel) {
+        liveLabel.style.opacity = '0.3';
+        setTimeout(() => { liveLabel.style.opacity = '1'; }, 300);
+      }
+    } catch(e) {
+      console.warn('Auto-refresh failed:', e);
+    }
+  }, AUTO_REFRESH_MS);
+}
+
+function stopAutoRefresh() {
+  if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
+}
+
+// ── Init ──
+window.addEventListener('DOMContentLoaded', () => {
+  // If we have a GAS URL already confirmed (sessionStorage), try to load immediately.
+  // Otherwise show the setup overlay so the user can enter their URL.
+  const storedUrl = (() => { try { return sessionStorage.getItem(GAS_URL_KEY); } catch(e) { return null; } })();
+  if (storedUrl && storedUrl.includes('script.google.com')) {
+    GAS_URL = storedUrl;
+    document.getElementById('sheetsSetupOverlay').style.display = 'none';
+    initApp().then(() => startAutoRefresh()).catch(err => {
+      console.warn('Auto-connect failed, showing setup overlay:', err);
+      document.getElementById('sheetsSetupOverlay').style.display = 'flex';
+    });
+  } else if (GAS_URL_HARDCODED.includes('script.google.com')) {
+    // Try the hardcoded URL silently; show overlay on failure
+    GAS_URL = GAS_URL_HARDCODED;
+    document.getElementById('sheetsSetupOverlay').style.display = 'none';
+    initApp().then(() => {
+      // Confirm it worked — persist to sessionStorage
+      try { sessionStorage.setItem(GAS_URL_KEY, GAS_URL); } catch(e) {}
+      startAutoRefresh();
+    }).catch(err => {
+      console.warn('Hardcoded GAS URL failed, showing setup overlay:', err);
+      document.getElementById('sheetsSetupOverlay').style.display = 'flex';
+    });
+  } else {
+    // No valid URL — show setup overlay
+    document.getElementById('sheetsSetupOverlay').style.display = 'flex';
+  }
+});
+// ═══════════════════════════════════════════════════════════
+//  CHECKLIST ITEM MANAGER (Admin Panel)
+// ═══════════════════════════════════════════════════════════
+let clMgmtSection = 0; // currently active section in manager
+
+function renderClMgmt() {
+  // Build section tabs
+  const tabsEl = document.getElementById('clMgmtTabs');
+  if (!tabsEl) return;
+  tabsEl.innerHTML = CHECKLISTS.map((sec, i) =>
+    `<button class="cl-mgmt-tab${i===clMgmtSection?' active':''}" onclick="clMgmtSwitch(${i})">${sec.name}</button>`
+  ).join('');
+
+  // Update count badge
+  const countEl = document.getElementById('clMgmtCount');
+  if (countEl) countEl.textContent = `${CHECKLISTS[clMgmtSection].items.length} items`;
+
+  // Build items list
+  const listEl = document.getElementById('clItemsList');
+  if (!listEl) return;
+  const items = CHECKLISTS[clMgmtSection].items;
+  if (items.length === 0) {
+    listEl.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:1rem 0;text-align:center">No items yet — add one above.</div>';
+    return;
+  }
+  listEl.innerHTML = items.map((item, idx) => `
+    <div class="cl-mgmt-item" id="clmi-${idx}">
+      <span class="cl-mgmt-num">${String(idx+1).padStart(2,'0')}</span>
+      <input class="cl-mgmt-text" value="${item.replace(/"/g,'&quot;')}"
+        onblur="clRenameItem(${idx}, this.value)"
+        onkeydown="if(event.key==='Enter'){this.blur()}"
+        title="Click to rename">
+      <button class="cl-mgmt-del" onclick="clDeleteItem(${idx})" title="Remove item">×</button>
+    </div>
+  `).join('');
+
+  // Show save reminder
+  const existing = document.getElementById('clMgmtSaveRow');
+  if (!existing) {
+    const saveRow = document.createElement('div');
+    saveRow.className = 'cl-mgmt-save';
+    saveRow.id = 'clMgmtSaveRow';
+    saveRow.innerHTML = `<button class="btn-submit" onclick="clSaveChanges()" style="padding:8px 22px">💾 Save & Apply Changes</button>`;
+    document.getElementById('clItemsList').after(saveRow);
+  }
+}
+
+function clMgmtSwitch(si) {
+  clMgmtSection = si;
+  renderClMgmt();
+}
+
+function clAddItem() {
+  const input = document.getElementById('clNewItemText');
+  const text = input.value.trim();
+  if (!text) { input.focus(); return; }
+  CHECKLISTS[clMgmtSection].items.push(text);
+  input.value = '';
+  renderClMgmt();
+  // Auto-scroll to bottom of list
+  const listEl = document.getElementById('clItemsList');
+  if (listEl) listEl.lastElementChild && listEl.lastElementChild.scrollIntoView({ behavior: 'smooth' });
+}
+
+function clDeleteItem(idx) {
+  const itemName = CHECKLISTS[clMgmtSection].items[idx];
+  if (!confirm(`Remove "${itemName}" from ${CHECKLISTS[clMgmtSection].name}?`)) return;
+  CHECKLISTS[clMgmtSection].items.splice(idx, 1);
+  // Also fix itemPerms for all dealers (remove the slot at this index)
+  Object.values(dealerRegistry).forEach(dealer => {
+    const perms = dealer.itemPerms?.[clMgmtSection];
+    if (Array.isArray(perms)) perms.splice(idx, 1);
+  });
+  renderClMgmt();
+}
+
+function clRenameItem(idx, newText) {
+  newText = newText.trim();
+  if (!newText) {
+    // Revert if empty
+    renderClMgmt();
+    return;
+  }
+  CHECKLISTS[clMgmtSection].items[idx] = newText;
+  // Re-number display without full re-render to avoid focus loss
+  document.getElementById('clMgmtCount').textContent = `${CHECKLISTS[clMgmtSection].items.length} items`;
+}
+
+async function clSaveChanges() {
+  // Re-render the dealer checklist views so they pick up the changes
+  if (typeof renderDealerMgmt === 'function') renderDealerMgmt();
+  // If a dealer is logged in on the checklist view, re-render their checklist
+  if (typeof renderChecklists === 'function' && typeof currentDealer !== 'undefined' && currentDealer) {
+    renderChecklists();
+  }
+  // Persist dealer registry (itemPerms may have changed from clDeleteItem)
+  await saveDealers();
+  showToast('Checklist updated & saved!', 'success');
+}
+
+// Hook into admin panel switch to init the manager
+const _origSwitchPanel = typeof switchPanel === 'function' ? switchPanel : null;
+
+</script>
+</body>
+</html>
