@@ -987,6 +987,11 @@ except: _GH_REPO   = "devshah24m/stockdashboard"
 try:    _GH_BRANCH = st.secrets["GITHUB_BRANCH"]
 except: _GH_BRANCH = "main"
 
+# Warn loudly if token is missing so it's easy to diagnose
+if not _GH_TOKEN:
+    import warnings
+    warnings.warn("[NBS] GITHUB_TOKEN not found in st.secrets — all data reads/writes will fail!", stacklevel=2)
+
 def _gh_api(path):
     return f"https://api.github.com/repos/{_GH_REPO}/contents/{path}"
 
@@ -1020,7 +1025,11 @@ def gh_read_file(path):
             data = json.loads(resp.read())
             content = base64.b64decode(data["content"]).decode("utf-8")
             return content, data.get("sha")
-    except Exception:
+    except urllib.error.HTTPError as e:
+        print(f"[GH] HTTP {e.code} reading {path}: {e.read().decode()[:200]}")
+        return None, None
+    except Exception as e:
+        print(f"[GH] Error reading {path}: {e}")
         return None, None
 
 def gh_write_file(path, content_str, commit_msg=None):
