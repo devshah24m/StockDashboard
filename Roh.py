@@ -6312,8 +6312,8 @@ Not supported for: **Mutual Fund, ETF, SGBs**
             return "color:#f85454;font-weight:600" if "Short" in str(val) else "color:#22d67b;font-weight:600"
 
         st.dataframe(
-            enriched_df.style.applymap(_style_pnl, subset=["P&L (₹)","P&L %"])
-                             .applymap(_style_pos, subset=["Position"]),
+            enriched_df.style.map(_style_pnl, subset=["P&L (₹)","P&L %"])
+                             .map(_style_pos, subset=["Position"]),
             use_container_width=True, hide_index=True
         )
 
