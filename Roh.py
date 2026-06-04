@@ -973,6 +973,112 @@ except Exception:
     pass
 
 # =========================================================
+# GITHUB PERSISTENCE LAYER
+# =========================================================
+
+import base64, urllib.request, urllib.error
+
+def _gh_token():
+    try:
+        return st.secrets["GITHUB_TOKEN"]
+    except Exception:
+        return None
+
+def _gh_repo():
+    try:
+        return st.secrets["GITHUB_REPO"]
+    except Exception:
+        return "devshah24m/stockdashboard"
+
+def _gh_branch():
+    try:
+        return st.secrets.get("GITHUB_BRANCH", "main")
+    except Exception:
+        return "main"
+
+def _gh_api(path):
+    return f"https://api.github.com/repos/{_gh_repo()}/contents/{path}"
+
+def _gh_headers():
+    return {
+        "Authorization": f"token {_gh_token()}",
+        "Content-Type": "application/json",
+        "User-Agent": "northeast-portfolio-app"
+    }
+
+def gh_read_file(path):
+    """Read a file from GitHub. Returns (content_str, sha) or (None, None)."""
+    try:
+        req = urllib.request.Request(
+            _gh_api(path) + f"?ref={_gh_branch()}",
+            headers=_gh_headers()
+        )
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read())
+            content = base64.b64decode(data["content"]).decode("utf-8")
+            return content, data["sha"]
+    except Exception:
+        return None, None
+
+def gh_write_file(path, content_str, commit_msg=None):
+    """Write/overwrite a file on GitHub."""
+    if not _gh_token():
+        return False
+    try:
+        _, existing_sha = gh_read_file(path)
+        encoded = base64.b64encode(content_str.encode("utf-8")).decode()
+        payload = {
+            "message": commit_msg or f"Auto-save: {path}",
+            "content": encoded,
+            "branch": _gh_branch()
+        }
+        if existing_sha:
+            payload["sha"] = existing_sha
+        data = json.dumps(payload).encode()
+        req = urllib.request.Request(
+            _gh_api(path), data=data, method="PUT", headers=_gh_headers()
+        )
+        with urllib.request.urlopen(req) as resp:
+            return resp.status in (200, 201)
+    except Exception:
+        return False
+
+def gh_save_csv(df, path, commit_msg=None):
+    """Save a DataFrame as CSV to GitHub."""
+    return gh_write_file(path, df.to_csv(index=False), commit_msg)
+
+def gh_load_csv(path):
+    """Load a CSV from GitHub into a DataFrame."""
+    content, _ = gh_read_file(path)
+    if content:
+        try:
+            return pd.read_csv(io.StringIO(content))
+        except Exception:
+            return None
+    return None
+
+def _gh_sync_to_local(gh_path, local_path):
+    """Pull a file from GitHub and write it locally."""
+    content, _ = gh_read_file(gh_path)
+    if content:
+        with open(local_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return True
+    return False
+
+def _local_sync_to_gh(local_path, gh_path, commit_msg=None):
+    """Push a local file up to GitHub."""
+    if not os.path.exists(local_path):
+        return False
+    with open(local_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    return gh_write_file(gh_path, content, commit_msg)
+
+# ── On startup: pull all data files from GitHub to local disk ─────
+for _ghf in ["clients.json"]:
+    _gh_sync_to_local(_ghf, _ghf)
+
+# =========================================================
 # CLIENT MANAGEMENT — Client Code login, no visible client list
 # =========================================================
 
@@ -1003,6 +1109,7 @@ def load_clients():
         if changed:
             with open(CLIENTS_FILE, "w") as f:
                 json.dump(migrated, f, indent=2)
+            _local_sync_to_gh(CLIENTS_FILE, CLIENTS_FILE, "Auto-migrate: clients.json")
         return migrated
     # First run — create default Rohith Sir account
     default = {
@@ -1019,6 +1126,8 @@ def save_clients(d):
     import json
     with open(CLIENTS_FILE, "w") as f:
         json.dump(d, f, indent=2)
+    # ── Also persist to GitHub so data survives Streamlit reboots ──
+    _local_sync_to_gh(CLIENTS_FILE, CLIENTS_FILE, "Auto-save: clients.json")
 
 def hash_password(pw: str) -> str:
     if not pw:
@@ -1027,11 +1136,17 @@ def hash_password(pw: str) -> str:
 
 def client_portfolio_file(code):
     safe = re.sub(r"[^\w\-]", "_", code.strip().upper())
-    return f"portfolio_{safe}.csv"
+    path = f"portfolio_{safe}.csv"
+    if not os.path.exists(path):
+        _gh_sync_to_local(path, path)
+    return path
 
 def client_trades_file(code):
     safe = re.sub(r"[^\w\-]", "_", code.strip().upper())
-    return f"trades_{safe}.csv"
+    path = f"trades_{safe}.csv"
+    if not os.path.exists(path):
+        _gh_sync_to_local(path, path)
+    return path
 
 # ── Session state bootstrap ───────────────────────────────────────
 for _k, _v in [
@@ -5095,6 +5210,7 @@ else:
         columns=["Ticker", "Shares", "Buy_Price", "Buy_Date"]
     )
     df.to_csv(PORTFOLIO_FILE, index=False)
+    _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
 
 # ── Normalise Asset_Type from bulk-import variants → canonical names ──
 # Maps values like "Bond", "bond", "NCD", "Equity", "MF" etc.
@@ -5148,6 +5264,7 @@ else:
                  "Buy_Price_At_Sell", "Booked_PnL", "Asset_Type"]
     )
     trades_df.to_csv(TRADES_FILE, index=False)
+    _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
 
 # ── Auto-classify Asset_Type for trades that lack it ─────────────
 import re as _re_mod
@@ -5200,6 +5317,7 @@ for _idx, _tr in trades_df.iterrows():
         _trades_changed = True
 if _trades_changed and os.path.exists(TRADES_FILE):
     trades_df.to_csv(TRADES_FILE, index=False)
+    _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
 
 
 def compute_net_holdings(portfolio_df, trades_df):
@@ -5687,13 +5805,16 @@ with st.sidebar:
                                     _merged_pf = pd.concat([_existing_pf, _new_portfolio], ignore_index=True)
                                     _merged_pf = _merged_pf.drop_duplicates(subset=["Ticker","Buy_Price","Shares"], keep="last")
                                     _merged_pf.to_csv(PORTFOLIO_FILE, index=False)
+                                    _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                                     _saved_count = len(_new_portfolio)
                                 else:
                                     _new_portfolio.to_csv(PORTFOLIO_FILE, index=False)
+                                    _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                                     _saved_count = len(_new_portfolio)
                             else:
                                 # Replace mode — save exactly what Excel has
                                 _new_portfolio.to_csv(PORTFOLIO_FILE, index=False)
+                                _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                                 _saved_count = len(_new_portfolio)
 
                             # ── Build trades rows (sold entries) ────────────────────────
@@ -5737,13 +5858,16 @@ with st.sidebar:
                                     _existing_tr = pd.read_csv(TRADES_FILE)
                                     _merged_tr = pd.concat([_existing_tr, _new_trades_df], ignore_index=True)
                                     _merged_tr.to_csv(TRADES_FILE, index=False)
+                                    _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
                                 else:
                                     _new_trades_df.to_csv(TRADES_FILE, index=False)
+                                    _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
                             elif "🔄 Replace" in _xl_mode:
                                 pd.DataFrame(
                                     columns=["Ticker","Sell_Qty","Sell_Price","Sell_Date",
                                              "Buy_Price_At_Sell","Booked_PnL","Asset_Type"]
                                 ).to_csv(TRADES_FILE, index=False)
+                                _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
 
                             st.success(
                                 f"✅ Import complete! "
@@ -5799,6 +5923,7 @@ with st.sidebar:
                         df.at[idx, "Buy_Price"] = avg_price
                         df.at[idx, "Buy_Date"]  = str(buy_date)
                         df.to_csv(PORTFOLIO_FILE, index=False)
+                        _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                         st.success(
                             f"✅ {ticker} updated — "
                             f"New Qty: {new_qty:,.2f} | "
@@ -5811,6 +5936,7 @@ with st.sidebar:
                         )
                         df = pd.concat([df, new_row], ignore_index=True)
                         df.to_csv(PORTFOLIO_FILE, index=False)
+                        _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                         st.success(f"✅ {ticker} added at ₹{buy_price:,.2f}")
                     st.rerun()
 
@@ -5818,6 +5944,7 @@ with st.sidebar:
         if "Asset_Type" not in df.columns and not df.empty:
             df["Asset_Type"] = df["Ticker"].apply(classify_asset)
             df.to_csv(PORTFOLIO_FILE, index=False)
+            _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
 
         # ── UPDATE UNLISTED SHARE CMP ──────────────────────────────
         _unlisted_holdings = df[df.get("Asset_Type", pd.Series()) == "Unlisted Share"] if "Asset_Type" in df.columns else pd.DataFrame()
@@ -5859,6 +5986,7 @@ with st.sidebar:
             if st.button("Delete Selected"):
                 df = df.drop(idx).reset_index(drop=True)
                 df.to_csv(PORTFOLIO_FILE, index=False)
+                _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                 st.success("Holding Deleted")
                 st.rerun()
 
@@ -5926,6 +6054,7 @@ with st.sidebar:
                                      "Buy_Price_At_Sell","Booked_PnL","Asset_Type"])
                         trades_df = pd.concat([trades_df, new_trade], ignore_index=True)
                         trades_df.to_csv(TRADES_FILE, index=False)
+                        _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
                         st.success(
                             f"✅ Sold {sell_qty:,.0f} × {sell_ticker} @ ₹{sell_price:,.2f} | "
                             f"Buy Rate: ₹{buy_rate_input:,.2f} | "
@@ -5951,6 +6080,7 @@ with st.sidebar:
                 if st.button("🗑️ Delete Trade", key="del_trade_sidebar_btn"):
                     trades_df = trades_df.drop(_del_idx).reset_index(drop=True)
                     trades_df.to_csv(TRADES_FILE, index=False)
+                    _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
                     st.success("✅ Trade deleted.")
                     st.rerun()
 
@@ -6342,16 +6472,34 @@ Not supported for: **Mutual Fund, ETF, SGBs**
                         subset=["Stock Name","Asset Class","Buy Date","Buy Price","Buy Qty"], keep="last"
                     )
                     st.session_state["portfolio_df"] = merged
+                    _save_df = merged
                     st.success(f"✅ Added {len(cleaned_df)} row(s). Portfolio now has {len(merged)} trade(s).")
                 else:
                     st.session_state["portfolio_df"] = cleaned_df.copy()
+                    _save_df = cleaned_df.copy()
                     st.success(f"✅ Imported {len(cleaned_df)} trade(s).")
+                # ── Persist to CSV + GitHub immediately ──
+                try:
+                    _pf_path = client_portfolio_file_fn(dev_code_ref)
+                    _save_df.to_csv(_pf_path, index=False)
+                    _local_sync_to_gh(_pf_path, _pf_path, f"Master Import: portfolio for {dev_code_ref}")
+                    st.info("💾 Saved to GitHub — data will persist after reboots.")
+                except Exception as _e:
+                    st.warning(f"⚠️ GitHub save failed: {_e}")
         with col_replace:
             if has_existing:
                 if st.button("🔄 Replace Existing Portfolio", use_container_width=True,
                              type="secondary", key="mi_replace_btn"):
                     st.session_state["portfolio_df"] = cleaned_df.copy()
                     st.warning(f"⚠️ Portfolio replaced with {len(cleaned_df)} new trade(s). Previous {len(existing)} removed.")
+                    # ── Persist to CSV + GitHub immediately ──
+                    try:
+                        _pf_path = client_portfolio_file_fn(dev_code_ref)
+                        cleaned_df.to_csv(_pf_path, index=False)
+                        _local_sync_to_gh(_pf_path, _pf_path, f"Master Import (replace): portfolio for {dev_code_ref}")
+                        st.info("💾 Saved to GitHub — data will persist after reboots.")
+                    except Exception as _e:
+                        st.warning(f"⚠️ GitHub save failed: {_e}")
             else:
                 st.button("🔄 Replace Existing Portfolio", use_container_width=True,
                           disabled=True, key="mi_replace_btn_dis")
@@ -7437,6 +7585,7 @@ if _nav_tab == "Watchlist":
                             _pf.at[_idx, "Buy_Price"] = _avg_px
                             _pf.at[_idx, "Buy_Date"]  = _today_str
                             _pf.to_csv(PORTFOLIO_FILE, index=False)
+                            _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                             st.success(
                                 f"✅ BUY recorded — {_clean_ticker} · "
                                 f"New Qty: {_new_qty:,.2f} · Avg Price: ₹{_avg_px:,.2f}"
@@ -7453,6 +7602,7 @@ if _nav_tab == "Watchlist":
                             )
                             _pf = pd.concat([_pf, _new_row], ignore_index=True)
                             _pf.to_csv(PORTFOLIO_FILE, index=False)
+                            _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                             st.success(
                                 f"✅ BUY recorded — {_clean_ticker} added · "
                                 f"Qty: {_ord_qty} · Price: ₹{_ord_price:.2f}"
@@ -7482,6 +7632,7 @@ if _nav_tab == "Watchlist":
                             )
                             _tf = pd.concat([_tf, _sell_row], ignore_index=True)
                             _tf.to_csv(TRADES_FILE, index=False)
+                            _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
                             _pnl_str = f"{'▲' if _pnl >= 0 else '▼'} ₹{abs(_pnl):,.2f}"
                             st.success(
                                 f"✅ SELL recorded — {_clean_ticker} · "
@@ -8451,6 +8602,7 @@ if _nav_tab == "Portfolio":
                     df.drop(df[_mask].index, inplace=True)
                     df.reset_index(drop=True, inplace=True)
                     df.to_csv(PORTFOLIO_FILE, index=False)
+                    _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                     st.success(f"🗑️ Deleted: {', '.join(_deleted_tickers)}. Refreshing...")
                     st.rerun()
 
@@ -8470,6 +8622,7 @@ if _nav_tab == "Portfolio":
                         df.at[orig_idx, "Shares"]    = round(float(new_shares),    4)
                         df.at[orig_idx, "Buy_Price"] = round(float(new_buy_price), 4)
                     df.to_csv(PORTFOLIO_FILE, index=False)
+                    _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                     st.success(f"✅ {len(changed_rows)} holding(s) updated. Refreshing...")
                     st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
@@ -9128,6 +9281,7 @@ if _nav_tab == "Portfolio":
                     trades_df.at[_si_idx, "Sell_Price"]  = round(_np, 4)
                     trades_df.at[_si_idx, "Booked_PnL"]  = _new_booked
                 trades_df.to_csv(TRADES_FILE, index=False)
+                _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
                 st.success(f"✅ {len(_sell_changed)} sell trade(s) updated. Refreshing...")
                 st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
