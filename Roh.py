@@ -5286,9 +5286,14 @@ _ASSET_TYPE_NORMALISE = {
     "reit": "REIT/InvIT", "reits": "REIT/InvIT",
     "real estate investment trust": "REIT/InvIT",
     "invit": "REIT/InvIT", "infrastructure investment trust": "REIT/InvIT",
-    # F&O
+    # F&O — including Master Import variants ("F&O - Futures", "F&O - Options")
     "fo": "F&O", "futures": "F&O", "future": "F&O",
     "options": "F&O", "option": "F&O", "derivatives": "F&O",
+    "f&o - futures": "F&O", "f&o - options": "F&O",
+    "f&o-futures": "F&O", "f&o-options": "F&O",
+    # Commodity & Currency (MI asset classes → nearest canonical)
+    "commodity": "F&O", "currency": "Currency F&O",
+    "sgbs (gold bonds)": "SGB", "sgbs": "SGB",
     # ETF sub-types
     "commodity etf": "Commodity ETF", "gold etf": "Commodity ETF",
     "liquid etf": "Liquid ETF",
