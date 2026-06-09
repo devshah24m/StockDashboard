@@ -1186,15 +1186,16 @@ def hash_password(pw: str) -> str:
 def client_portfolio_file(code):
     safe = re.sub(r"[^\w\-]", "_", code.strip().upper())
     path = f"portfolio_{safe}.csv"
-    if not os.path.exists(path):
-        _gh_sync_to_local(path, path)
+    # Always pull from GitHub — local disk is ephemeral on Streamlit Cloud.
+    # This ensures fresh data on every login / page reload.
+    _gh_sync_to_local(path, path)
     return path
 
 def client_trades_file(code):
     safe = re.sub(r"[^\w\-]", "_", code.strip().upper())
     path = f"trades_{safe}.csv"
-    if not os.path.exists(path):
-        _gh_sync_to_local(path, path)
+    # Always pull from GitHub — local disk is ephemeral on Streamlit Cloud.
+    _gh_sync_to_local(path, path)
     return path
 
 # ── Session state bootstrap ───────────────────────────────────────
