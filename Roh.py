@@ -1026,10 +1026,32 @@ def gh_read_file(path):
             content = base64.b64decode(data["content"]).decode("utf-8")
             return content, data.get("sha")
     except urllib.error.HTTPError as e:
-        print(f"[GH] HTTP {e.code} reading {path}: {e.read().decode()[:200]}")
+        _err_body = ""
+        try:
+            _err_body = e.read().decode()[:200]
+        except Exception:
+            pass
+        print(f"[GH] HTTP {e.code} reading {path}: {_err_body}")
+        # Surface the failure for diagnostics — last error wins per session
+        try:
+            import streamlit as _st_diag
+            _st_diag.session_state["_gh_last_error"] = (
+                f"HTTP {e.code} reading '{path}' "
+                f"(repo={_GH_REPO}, branch={_GH_BRANCH}, token_set={'yes' if _GH_TOKEN else 'NO'}): {_err_body}"
+            )
+        except Exception:
+            pass
         return None, None
     except Exception as e:
         print(f"[GH] Error reading {path}: {e}")
+        try:
+            import streamlit as _st_diag
+            _st_diag.session_state["_gh_last_error"] = (
+                f"Error reading '{path}' "
+                f"(repo={_GH_REPO}, branch={_GH_BRANCH}, token_set={'yes' if _GH_TOKEN else 'NO'}): {e}"
+            )
+        except Exception:
+            pass
         return None, None
 
 def gh_write_file(path, content_str, commit_msg=None):
@@ -5256,11 +5278,36 @@ def get_exchange(ticker):
 if os.path.exists(PORTFOLIO_FILE):
     df = pd.read_csv(PORTFOLIO_FILE)
 else:
-    df = pd.DataFrame(
-        columns=["Ticker", "Shares", "Buy_Price", "Buy_Date"]
-    )
-    df.to_csv(PORTFOLIO_FILE, index=False)
-    _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
+    # CRITICAL: do NOT blindly create+push an empty CSV here.
+    # If _gh_sync_to_local failed due to a transient network/API error
+    # (rather than the file genuinely not existing on GitHub), pushing
+    # an empty dataframe would PERMANENTLY WIPE the real saved portfolio.
+    #
+    # Distinguish the two cases by checking directly whether the file
+    # exists on GitHub before deciding to create a fresh one.
+    _gh_content, _ = gh_read_file(PORTFOLIO_FILE)
+    if _gh_content is not None:
+        # File exists on GitHub but local sync failed for some other reason
+        # (disk write error etc.) — load directly from the fetched content
+        # instead of touching GitHub at all.
+        try:
+            df = pd.read_csv(io.StringIO(_gh_content))
+            with open(PORTFOLIO_FILE, "w", encoding="utf-8") as _f:
+                _f.write(_gh_content)
+        except Exception:
+            df = pd.DataFrame(columns=["Ticker", "Shares", "Buy_Price", "Buy_Date"])
+        st.warning(
+            f"⚠️ Could not sync {PORTFOLIO_FILE} to local disk on startup, "
+            f"but loaded it directly from GitHub instead. "
+            f"GitHub data was NOT modified."
+        )
+    else:
+        # File genuinely doesn't exist on GitHub (new client) — safe to create.
+        df = pd.DataFrame(
+            columns=["Ticker", "Shares", "Buy_Price", "Buy_Date"]
+        )
+        df.to_csv(PORTFOLIO_FILE, index=False)
+        _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
 
 # ── Normalise Asset_Type from bulk-import variants → canonical names ──
 # Maps values like "Bond", "bond", "NCD", "Equity", "MF" etc.
@@ -5314,12 +5361,31 @@ if "Asset_Type" in df.columns:
 if os.path.exists(TRADES_FILE):
     trades_df = pd.read_csv(TRADES_FILE)
 else:
-    trades_df = pd.DataFrame(
-        columns=["Ticker", "Sell_Qty", "Sell_Price", "Sell_Date",
-                 "Buy_Price_At_Sell", "Booked_PnL", "Asset_Type"]
-    )
-    trades_df.to_csv(TRADES_FILE, index=False)
-    _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
+    # Same protection as PORTFOLIO_FILE above — never push an empty
+    # trades file to GitHub just because the local sync failed.
+    _gh_trades_content, _ = gh_read_file(TRADES_FILE)
+    if _gh_trades_content is not None:
+        try:
+            trades_df = pd.read_csv(io.StringIO(_gh_trades_content))
+            with open(TRADES_FILE, "w", encoding="utf-8") as _f:
+                _f.write(_gh_trades_content)
+        except Exception:
+            trades_df = pd.DataFrame(
+                columns=["Ticker", "Sell_Qty", "Sell_Price", "Sell_Date",
+                         "Buy_Price_At_Sell", "Booked_PnL", "Asset_Type"]
+            )
+        st.warning(
+            f"⚠️ Could not sync {TRADES_FILE} to local disk on startup, "
+            f"but loaded it directly from GitHub instead. "
+            f"GitHub data was NOT modified."
+        )
+    else:
+        trades_df = pd.DataFrame(
+            columns=["Ticker", "Sell_Qty", "Sell_Price", "Sell_Date",
+                     "Buy_Price_At_Sell", "Booked_PnL", "Asset_Type"]
+        )
+        trades_df.to_csv(TRADES_FILE, index=False)
+        _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
 
 # ── Auto-classify Asset_Type for trades that lack it ─────────────
 import re as _re_mod
@@ -14922,6 +14988,45 @@ if _nav_tab == "All Corporate Actions":
             })
 
         # ── Build dataframe ───────────────────────────────────────────────
+    _mkt_ca_cache_path = "market_corporate_actions_cache.json"
+    _mkt_ca_using_cache = False
+    _mkt_ca_cache_ts = None
+
+    if all_market_rows:
+        # ── Live fetch succeeded — persist this result to GitHub for fallback ──
+        try:
+            _cache_payload = {
+                "saved_at": pd.Timestamp.now().strftime("%d-%b-%Y %H:%M"),
+                "window": ca_window,
+                "exchange": ca_exchange,
+                "rows": [
+                    {**r, "_primary_dt": r["_primary_dt"].isoformat() if r.get("_primary_dt") is not None else None}
+                    for r in all_market_rows
+                ],
+            }
+            gh_write_file(
+                _mkt_ca_cache_path,
+                json.dumps(_cache_payload),
+                commit_msg="Auto-cache: market-wide corporate actions"
+            )
+        except Exception:
+            pass
+    else:
+        # ── Live fetch failed — try loading last cached snapshot from GitHub ──
+        try:
+            _cached_content, _ = gh_read_file(_mkt_ca_cache_path)
+            if _cached_content:
+                _cached = json.loads(_cached_content)
+                _mkt_ca_cache_ts = _cached.get("saved_at")
+                for r in _cached.get("rows", []):
+                    pdt = r.get("_primary_dt")
+                    r["_primary_dt"] = pd.to_datetime(pdt) if pdt else None
+                    all_market_rows.append(r)
+                if all_market_rows:
+                    _mkt_ca_using_cache = True
+        except Exception:
+            pass
+
     if not all_market_rows:
         st.markdown("""
 <div style="background:#0a1a2a;border:1px solid #1a4a7a;border-radius:10px;padding:16px 20px;margin:8px 0;">
@@ -14936,13 +15041,25 @@ if _nav_tab == "All Corporate Actions":
     <b style="color:#ffaa00;">•</b> Wait 2–5 minutes then refresh (IP rate limiting by exchange)<br><br>
     <span style="color:#666688;font-size:11px;">
       ⚠️ NSE blocks non-browser traffic from cloud/VPS IPs. If running on Streamlit Cloud or a VPS,
-      this tab may be unreliable. Running locally on your PC gives best results.
+      this tab may be unreliable. Running locally on your PC gives best results.<br>
+      No cached snapshot is available yet — once a live fetch succeeds (e.g. running locally),
+      it will be saved to GitHub automatically and used as a fallback here.
     </span>
   </div>
 </div>
 """, unsafe_allow_html=True)
     else:
+        if _mkt_ca_using_cache:
+            st.markdown(f"""
+<div style="background:#1a1a0a;border:1px solid #7a6a1a;border-radius:10px;padding:10px 16px;margin-bottom:12px;">
+  <span style="font-size:12px;color:#ffd54f;">
+    📦 Live fetch from NSE/BSE failed — showing <b>cached data from {_mkt_ca_cache_ts}</b>.
+    This cache is saved automatically whenever a live fetch succeeds (e.g. when running locally).
+  </span>
+</div>
+""", unsafe_allow_html=True)
         mkt_ca_df = pd.DataFrame(all_market_rows)
+        mkt_ca_df["_primary_dt"] = pd.to_datetime(mkt_ca_df["_primary_dt"], errors="coerce")
         mkt_ca_df = (
             mkt_ca_df
             .sort_values("_primary_dt")
