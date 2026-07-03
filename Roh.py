@@ -5302,12 +5302,22 @@ else:
             f"GitHub data was NOT modified."
         )
     else:
-        # File genuinely doesn't exist on GitHub (new client) — safe to create.
-        df = pd.DataFrame(
-            columns=["Ticker", "Shares", "Buy_Price", "Buy_Date"]
-        )
-        df.to_csv(PORTFOLIO_FILE, index=False)
-        _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
+        # If token is missing/broken, gh_read_file returns None for EVERYTHING —
+        # including files that DO exist on GitHub. Never wipe in that case.
+        if not _GH_TOKEN:
+            st.error(
+                "⛔ GITHUB_TOKEN is not set in Streamlit secrets. "
+                "Portfolio data cannot be loaded. "
+                "Go to App Settings → Secrets and add GITHUB_TOKEN."
+            )
+            df = pd.DataFrame(columns=["Ticker", "Shares", "Buy_Price", "Buy_Date"])
+        else:
+            # File genuinely doesn't exist on GitHub (new client) — safe to create.
+            df = pd.DataFrame(
+                columns=["Ticker", "Shares", "Buy_Price", "Buy_Date"]
+            )
+            df.to_csv(PORTFOLIO_FILE, index=False)
+            _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
 
 # ── Normalise Asset_Type from bulk-import variants → canonical names ──
 # Maps values like "Bond", "bond", "NCD", "Equity", "MF" etc.
@@ -5380,12 +5390,18 @@ else:
             f"GitHub data was NOT modified."
         )
     else:
-        trades_df = pd.DataFrame(
-            columns=["Ticker", "Sell_Qty", "Sell_Price", "Sell_Date",
-                     "Buy_Price_At_Sell", "Booked_PnL", "Asset_Type"]
-        )
-        trades_df.to_csv(TRADES_FILE, index=False)
-        _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
+        if not _GH_TOKEN:
+            trades_df = pd.DataFrame(
+                columns=["Ticker", "Sell_Qty", "Sell_Price", "Sell_Date",
+                         "Buy_Price_At_Sell", "Booked_PnL", "Asset_Type"]
+            )
+        else:
+            trades_df = pd.DataFrame(
+                columns=["Ticker", "Sell_Qty", "Sell_Price", "Sell_Date",
+                         "Buy_Price_At_Sell", "Booked_PnL", "Asset_Type"]
+            )
+            trades_df.to_csv(TRADES_FILE, index=False)
+            _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
 
 # ── Auto-classify Asset_Type for trades that lack it ─────────────
 import re as _re_mod
