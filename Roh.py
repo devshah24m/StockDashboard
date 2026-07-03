@@ -1142,12 +1142,12 @@ def gh_sync_all_data_files():
 
 # ── On every cold boot: pull ALL data files from GitHub to local disk ──
 # @st.cache_resource runs exactly once per Streamlit server process (i.e. once per cold boot)
-@st.cache_resource
-def _run_startup_gh_sync():
+# Run once per browser session (after st.secrets is fully loaded).
+# @st.cache_resource was removed — it ran at module-load time before
+# st.secrets initialised, so _GH_TOKEN was always "" on first cold boot.
+if not st.session_state.get("_startup_sync_done"):
     gh_sync_all_data_files()
-    return True
-
-_run_startup_gh_sync()
+    st.session_state["_startup_sync_done"] = True
 
 # =========================================================
 # CLIENT MANAGEMENT — Client Code login, no visible client list
