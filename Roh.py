@@ -11558,6 +11558,7 @@ def is_recent_news(pub_text):
 
 # ── Company name aliases for news matching ──────────────────────────────────
 _NEWS_TICKER_ALIASES = {
+    # ── Already mapped ───────────────────────────────────────────────────
     "KALAMANDIR":    ("Sai Silks Kalamandir",        ["sai silks kalamandir", "sai silks"]),
     "GAYAPROJ":      ("Gayatri Projects",             ["gayatri projects"]),
     "JAYBARMARU":    ("Jay Bharat Maruti",            ["jay bharat maruti"]),
@@ -11577,6 +11578,100 @@ _NEWS_TICKER_ALIASES = {
     "CHENNPETRO":    ("Chennai Petroleum",            ["chennai petroleum", "cpcl", "chennai petro corporation"]),
     "BCG":           ("Brightcom Group",              ["brightcom group", "brightcom"]),
     "CEINSYS":       ("Ceinsys Tech",                 ["ceinsys tech", "ceinsys technologies", "ceinsys"]),
+
+    # ── High-volume portfolio stocks (added for proper news matching) ────
+    "KFINTECH":      ("KFin Technologies",            ["kfin technologies", "kfin tech", "kfintech", "kfin"]),
+    "OFSS":          ("Oracle Financial Services",    ["oracle financial services", "oracle financial", "ofss"]),
+    "ABB":           ("ABB India",                    ["abb india", "abb ltd", "abb limited", "abb"]),
+    "DRREDDY":       ("Dr Reddys Laboratories",       ["dr reddy", "dr reddys", "dr. reddy", "dr. reddys", "drreddy", "drl"]),
+    "WOCKPHARMA":    ("Wockhardt",                    ["wockhardt", "wockpharma", "wockhardt ltd"]),
+    "CENTUM":        ("Centum Electronics",           ["centum electronics", "centum"]),
+    "EXPLEOSOL":     ("Expleo Solutions",             ["expleo solutions", "expleo sol", "expleo"]),
+    "VENUSREM":      ("Venus Remedies",               ["venus remedies", "venus remedies ltd"]),
+    "AIAENG":        ("AIA Engineering",              ["aia engineering", "aia eng"]),
+    "TCS":           ("Tata Consultancy Services",    ["tata consultancy", "tcs", "tcs ltd", "tcs limited"]),
+    "INFY":          ("Infosys",                      ["infosys", "infy"]),
+    "WIPRO":         ("Wipro",                        ["wipro"]),
+    "HCLTECH":       ("HCL Technologies",             ["hcl technologies", "hcl tech", "hcltech"]),
+    "TECHM":         ("Tech Mahindra",                ["tech mahindra", "techm"]),
+    "RELIANCE":      ("Reliance Industries",          ["reliance industries", "reliance", "ril"]),
+    "HDFCBANK":      ("HDFC Bank",                    ["hdfc bank", "hdfcbank"]),
+    "ICICIBANK":     ("ICICI Bank",                   ["icici bank", "icicibank"]),
+    "SBIN":          ("State Bank of India",          ["state bank of india", "sbi", "sbin"]),
+    "AXISBANK":      ("Axis Bank",                    ["axis bank", "axisbank"]),
+    "KOTAKBANK":     ("Kotak Mahindra Bank",          ["kotak mahindra bank", "kotak bank", "kotak mahindra"]),
+    "BAJFINANCE":    ("Bajaj Finance",                ["bajaj finance", "bajfinance"]),
+    "BAJAJFINSV":    ("Bajaj Finserv",                ["bajaj finserv", "bajajfinsv"]),
+    "LTIM":          ("LTIMindtree",                  ["ltimindtree", "ltim", "l&t infotech"]),
+    "LT":            ("Larsen and Toubro",            ["larsen & toubro", "larsen and toubro", "l&t", "l & t"]),
+    "SUNPHARMA":     ("Sun Pharmaceutical",           ["sun pharmaceutical", "sun pharma", "sunpharma"]),
+    "CIPLA":         ("Cipla",                        ["cipla"]),
+    "LUPIN":         ("Lupin",                        ["lupin"]),
+    "DIVISLAB":      ("Divi Laboratories",            ["divi laboratories", "divi lab", "divislab"]),
+    "APOLLOHOSP":    ("Apollo Hospitals",             ["apollo hospitals", "apollo hospital"]),
+    "NESTLEIND":     ("Nestle India",                 ["nestle india", "nestleind"]),
+    "TITAN":         ("Titan Company",                ["titan company", "titan"]),
+    "ASIANPAINT":    ("Asian Paints",                 ["asian paints", "asianpaint"]),
+    "PIDILITIND":    ("Pidilite Industries",          ["pidilite industries", "pidilite"]),
+    "MARICO":        ("Marico",                       ["marico"]),
+    "DABUR":         ("Dabur India",                  ["dabur india", "dabur"]),
+    "GODREJCP":      ("Godrej Consumer Products",     ["godrej consumer", "godrej consumer products"]),
+    "BRITANNIA":     ("Britannia Industries",         ["britannia industries", "britannia"]),
+    "HINDUNILVR":    ("Hindustan Unilever",           ["hindustan unilever", "hul"]),
+    "MARUTI":        ("Maruti Suzuki",                ["maruti suzuki", "maruti"]),
+    "TATAMOTORS":    ("Tata Motors",                  ["tata motors", "tatamotors"]),
+    "M&M":           ("Mahindra and Mahindra",        ["mahindra & mahindra", "mahindra and mahindra", "m&m"]),
+    "HEROMOTOCO":    ("Hero MotoCorp",                ["hero motocorp", "hero moto corp", "heromotoco"]),
+    "BAJAJ-AUTO":    ("Bajaj Auto",                   ["bajaj auto"]),
+    "EICHERMOT":     ("Eicher Motors",                ["eicher motors", "royal enfield", "eichermot"]),
+    "ONGC":          ("Oil and Natural Gas Corporation", ["ongc", "oil and natural gas", "oil & natural gas"]),
+    "BPCL":          ("Bharat Petroleum",             ["bharat petroleum", "bpcl"]),
+    "IOC":           ("Indian Oil Corporation",       ["indian oil", "ioc", "indian oil corporation"]),
+    "POWERGRID":     ("Power Grid Corporation",       ["power grid corporation", "powergrid"]),
+    "NTPC":          ("NTPC",                         ["ntpc"]),
+    "COALINDIA":     ("Coal India",                   ["coal india", "coalindia"]),
+    "ADANIPORTS":    ("Adani Ports",                  ["adani ports", "adaniports"]),
+    "ADANIENT":      ("Adani Enterprises",            ["adani enterprises", "adanient"]),
+    "HINDPETRO":     ("Hindustan Petroleum",          ["hindustan petroleum", "hpcl", "hindpetro"]),
+    "GRASIM":        ("Grasim Industries",            ["grasim industries", "grasim"]),
+    "ULTRACEMCO":    ("UltraTech Cement",             ["ultratech cement", "ultracemco"]),
+    "SHREECEM":      ("Shree Cement",                 ["shree cement", "shreecem"]),
+    "AMBUJACEM":     ("Ambuja Cements",               ["ambuja cements", "ambuja cement", "ambujacem"]),
+    "ACEM":          ("Ambuja Cements",               ["ambuja cements", "ambuja cement"]),
+    "ACC":           ("ACC Limited",                  ["acc limited", "acc cement"]),
+    "JSWSTEEL":      ("JSW Steel",                    ["jsw steel", "jswsteel"]),
+    "TATASTEEL":     ("Tata Steel",                   ["tata steel", "tatasteel"]),
+    "HINDALCO":      ("Hindalco Industries",          ["hindalco industries", "hindalco"]),
+    "VEDL":          ("Vedanta",                      ["vedanta", "vedl"]),
+    "SAIL":          ("Steel Authority of India",     ["steel authority of india", "sail"]),
+    "NMDC":          ("NMDC",                         ["nmdc"]),
+    "ZOMATO":        ("Zomato",                       ["zomato"]),
+    "NYKAA":         ("FSN E-Commerce",               ["nykaa", "fsn e-commerce", "fsn ecommerce"]),
+    "PAYTM":         ("Paytm",                        ["paytm", "one 97 communications"]),
+    "POLICYBZR":     ("PB Fintech",                   ["policybazaar", "pb fintech", "policy bazaar"]),
+    "DELHIVERY":     ("Delhivery",                    ["delhivery"]),
+    "IRCTC":         ("Indian Railway Catering",      ["irctc", "indian railway catering"]),
+    "IRFC":          ("Indian Railway Finance",       ["irfc", "indian railway finance"]),
+    "HAL":           ("Hindustan Aeronautics",        ["hindustan aeronautics", "hal"]),
+    "BEL":           ("Bharat Electronics",           ["bharat electronics", "bel"]),
+    "BHEL":          ("Bharat Heavy Electricals",     ["bharat heavy electricals", "bhel"]),
+    "SIEMENS":       ("Siemens India",                ["siemens india", "siemens"]),
+    "HAVELLS":       ("Havells India",                ["havells india", "havells"]),
+    "VOLTAS":        ("Voltas",                       ["voltas"]),
+    "BLUESTAR":      ("Blue Star",                    ["blue star", "bluestar"]),
+    "WHIRLPOOL":     ("Whirlpool of India",           ["whirlpool of india", "whirlpool india"]),
+    "POLYCAB":       ("Polycab India",                ["polycab india", "polycab"]),
+    "KPRMILL":       ("KPR Mill",                     ["kpr mill", "kprmill"]),
+    "PAGEIND":       ("Page Industries",              ["page industries", "jockey india"]),
+    "RAYMOND":       ("Raymond",                      ["raymond"]),
+    "TRENT":         ("Trent",                        ["trent", "westside"]),
+    "DMART":         ("Avenue Supermarts",            ["avenue supermarts", "dmart", "d-mart"]),
+    "ABCAPITAL":     ("Aditya Birla Capital",         ["aditya birla capital", "abcapital"]),
+    "MFSL":          ("Max Financial Services",       ["max financial services", "max financial"]),
+    "CHOLAFIN":      ("Cholamandalam Investment",     ["cholamandalam investment", "chola fin", "cholafin"]),
+    "MOTHERSON":     ("Samvardhana Motherson",        ["samvardhana motherson", "motherson sumi", "motherson"]),
+    "BOSCHLTD":      ("Bosch India",                  ["bosch india", "bosch ltd"]),
+    "SWARAJENG":     ("Swaraj Engines",               ["swaraj engines", "swarajeng"]),
 }
 
 # Per-ticker hard disambiguation: (required_any, blocked_any)
@@ -11602,6 +11697,33 @@ _NEWS_GOOGLE_OVERRIDES = {
     "OCCLLTD":       "Oriental Carbon Chemicals India NSE",
     "BCG":           "Brightcom Group India NSE",
     "ITC":           "ITC Limited India NSE results",
+    # Added for portfolio stocks whose ticker doesn't match company name
+    "KFINTECH":      "KFin Technologies India",
+    "OFSS":          "Oracle Financial Services India",
+    "DRREDDY":       "Dr Reddys Laboratories India",
+    "WOCKPHARMA":    "Wockhardt India",
+    "CENTUM":        "Centum Electronics India",
+    "EXPLEOSOL":     "Expleo Solutions India",
+    "VENUSREM":      "Venus Remedies India",
+    "AIAENG":        "AIA Engineering India",
+    "GVPIL":         "GE Power India",
+    "ENRIN":         "Siemens Energy India",
+    "INTERARCH":     "Interarch Building Solutions India",
+    "VOLTAMP":       "Voltamp Transformers India",
+    "RECLTD":        "REC Limited India",
+    "INDUSINDBK":    "IndusInd Bank India",
+    "MAWANASUG":     "Mawana Sugars India",
+    "EXCELINDUS":    "Excel Industries India",
+    "CHENNPETRO":    "Chennai Petroleum Corporation India",
+    "CEINSYS":       "Ceinsys Tech India",
+    "HINDPETRO":     "Hindustan Petroleum Corporation India",
+    "BAJAJ-AUTO":    "Bajaj Auto India",
+    "NYKAA":         "Nykaa India FSN E-Commerce",
+    "POLICYBZR":     "Policybazaar PB Fintech India",
+    "IRCTC":         "IRCTC Indian Railway Catering India",
+    "IRFC":          "Indian Railway Finance Corporation",
+    "HAL":           "Hindustan Aeronautics Limited India",
+    "BOSCHLTD":      "Bosch India Limited",
 }
 
 def _get_news_company_name(ticker: str) -> str:
@@ -11686,7 +11808,7 @@ def fetch_google_news_query(query, force_ticker=None):
         feed = feedparser.parse(requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"}).content)
         # Build aliases for the force_ticker so we can validate title relevance
         _ft_aliases = _get_news_aliases(force_ticker) if force_ticker else []
-        for entry in feed.entries[:20]:
+        for entry in feed.entries[:30]:
             title = entry.get("title","").strip()
             title = re.sub(r'\s+-\s+[\w\s\.]+$', '', title).strip()
             summary = entry.get("summary","")
@@ -11699,7 +11821,19 @@ def fetch_google_news_query(query, force_ticker=None):
             # (not just anywhere in the article) to prevent tagging unrelated news
             if force_ticker and _ft_aliases:
                 title_lower = title.lower()
-                if not any(alias in title_lower for alias in _ft_aliases):
+                # Check aliases OR the company name (first alias is the human-readable name)
+                # Use word-boundary check for short aliases (≤5 chars) to avoid false matches
+                matched = False
+                for alias in _ft_aliases:
+                    if len(alias) <= 5:
+                        if re.search(r'(?<![a-z0-9])' + re.escape(alias) + r'(?![a-z0-9])', title_lower):
+                            matched = True
+                            break
+                    else:
+                        if alias in title_lower:
+                            matched = True
+                            break
+                if not matched:
                     continue
             art = {
                 "title":     title,
