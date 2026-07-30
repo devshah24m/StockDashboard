@@ -1076,31 +1076,10 @@ def gh_write_file(path, content_str, commit_msg=None):
             result = json.loads(resp.read())
             return "commit" in result
     except urllib.error.HTTPError as e:
-        _err_body = ""
-        try:
-            _err_body = e.read().decode()[:200]
-        except Exception:
-            pass
-        print(f"[GH] HTTP {e.code} writing {path}: {_err_body}")
-        try:
-            import streamlit as _st_diag
-            _st_diag.session_state["_gh_last_error"] = (
-                f"HTTP {e.code} writing '{path}' "
-                f"(repo={_GH_REPO}, branch={_GH_BRANCH}, token_set={'yes' if _GH_TOKEN else 'NO'}): {_err_body}"
-            )
-        except Exception:
-            pass
+        print(f"[GH] HTTP {e.code} writing {path}: {e.read().decode()[:200]}")
         return False
     except Exception as e:
         print(f"[GH] Error writing {path}: {e}")
-        try:
-            import streamlit as _st_diag
-            _st_diag.session_state["_gh_last_error"] = (
-                f"Error writing '{path}' "
-                f"(repo={_GH_REPO}, branch={_GH_BRANCH}, token_set={'yes' if _GH_TOKEN else 'NO'}): {e}"
-            )
-        except Exception:
-            pass
         return False
 
 def _gh_sync_to_local(gh_path, local_path):
@@ -1126,23 +1105,6 @@ def _local_sync_to_gh(local_path, gh_path, commit_msg=None):
     except Exception as e:
         print(f"[GH] Error syncing {local_path}: {e}")
         return False
-
-def _sync_or_warn(local_path, gh_path, commit_msg=None, label=None):
-    """Same as _local_sync_to_gh, but surfaces a visible Streamlit warning
-    (instead of silently swallowing the failure) if the push to GitHub
-    doesn't succeed — e.g. bad/expired GITHUB_TOKEN, wrong repo/branch,
-    or a transient GitHub API error. This is what makes import failures
-    visible instead of looking like a successful save that quietly
-    disappears on the next container restart."""
-    ok = _local_sync_to_gh(local_path, gh_path, commit_msg)
-    if not ok:
-        _reason = st.session_state.get("_gh_last_error", "unknown error — check GITHUB_TOKEN / repo settings")
-        st.error(
-            f"⚠️ Saved locally but FAILED to push {label or gh_path} to GitHub. "
-            f"This data will be lost on the next app restart unless you fix this. "
-            f"Reason: {_reason}"
-        )
-    return ok
 
 def gh_save_csv(df, path, commit_msg=None):
     """Save a DataFrame as CSV directly to GitHub."""
@@ -1218,7 +1180,7 @@ def load_clients():
         if changed:
             with open(CLIENTS_FILE, "w") as f:
                 json.dump(migrated, f, indent=2)
-            _sync_or_warn(CLIENTS_FILE, CLIENTS_FILE, "Auto-migrate: clients.json")
+            _local_sync_to_gh(CLIENTS_FILE, CLIENTS_FILE, "Auto-migrate: clients.json")
         return migrated
     # First run — create default Rohith Sir account
     default = {
@@ -1236,7 +1198,7 @@ def save_clients(d):
     with open(CLIENTS_FILE, "w") as f:
         json.dump(d, f, indent=2)
     # ── Also persist to GitHub so data survives Streamlit reboots ──
-    _sync_or_warn(CLIENTS_FILE, CLIENTS_FILE, "Auto-save: clients.json")
+    _local_sync_to_gh(CLIENTS_FILE, CLIENTS_FILE, "Auto-save: clients.json")
 
 def hash_password(pw: str) -> str:
     if not pw:
@@ -1246,16 +1208,20 @@ def hash_password(pw: str) -> str:
 def client_portfolio_file(code):
     safe = re.sub(r"[^\w\-]", "_", code.strip().upper())
     path = f"portfolio_{safe}.csv"
-    # Always pull from GitHub — local disk is ephemeral on Streamlit Cloud.
-    # This ensures fresh data on every login / page reload.
-    _gh_sync_to_local(path, path)
+    # Pull from GitHub ONLY if local file absent (Streamlit Cloud disk is ephemeral).
+    # Do NOT pull unconditionally — that creates a race condition where the page
+    # re-render fetches the OLD GH version and overwrites the freshly saved import
+    # before the GitHub PUT commit has even propagated.
+    if not os.path.exists(path):
+        _gh_sync_to_local(path, path)
     return path
 
 def client_trades_file(code):
     safe = re.sub(r"[^\w\-]", "_", code.strip().upper())
     path = f"trades_{safe}.csv"
-    # Always pull from GitHub — local disk is ephemeral on Streamlit Cloud.
-    _gh_sync_to_local(path, path)
+    # Pull from GH only if not already on disk — avoids race condition after import.
+    if not os.path.exists(path):
+        _gh_sync_to_local(path, path)
     return path
 
 # ── Session state bootstrap ───────────────────────────────────────
@@ -1813,7 +1779,7 @@ def load_scrip_master():
             with open(SCRIP_MASTER_CACHE_FILE) as f:
                 data = json.load(f)
         else:
-            return {}, {}, {}, {}
+            return {}, {}, {}
 
     equity_map = {}
     bse_map    = {}
@@ -5355,7 +5321,7 @@ else:
                 columns=["Ticker", "Shares", "Buy_Price", "Buy_Date"]
             )
             df.to_csv(PORTFOLIO_FILE, index=False)
-            _sync_or_warn(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
+            _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
 
 # ── Normalise Asset_Type from bulk-import variants → canonical names ──
 # Maps values like "Bond", "bond", "NCD", "Equity", "MF" etc.
@@ -5439,7 +5405,7 @@ else:
                          "Buy_Price_At_Sell", "Booked_PnL", "Asset_Type"]
             )
             trades_df.to_csv(TRADES_FILE, index=False)
-            _sync_or_warn(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
+            _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
 
 # ── Auto-classify Asset_Type for trades that lack it ─────────────
 import re as _re_mod
@@ -5492,7 +5458,7 @@ for _idx, _tr in trades_df.iterrows():
         _trades_changed = True
 if _trades_changed and os.path.exists(TRADES_FILE):
     trades_df.to_csv(TRADES_FILE, index=False)
-    _sync_or_warn(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
+    _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
 
 
 def compute_net_holdings(portfolio_df, trades_df):
@@ -5980,16 +5946,16 @@ with st.sidebar:
                                     _merged_pf = pd.concat([_existing_pf, _new_portfolio], ignore_index=True)
                                     _merged_pf = _merged_pf.drop_duplicates(subset=["Ticker","Buy_Price","Shares"], keep="last")
                                     _merged_pf.to_csv(PORTFOLIO_FILE, index=False)
-                                    _sync_or_warn(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
+                                    gh_save_csv(_merged_pf, PORTFOLIO_FILE, f"Import: portfolio {PORTFOLIO_FILE}")
                                     _saved_count = len(_new_portfolio)
                                 else:
                                     _new_portfolio.to_csv(PORTFOLIO_FILE, index=False)
-                                    _sync_or_warn(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
+                                    gh_save_csv(_new_portfolio, PORTFOLIO_FILE, f"Import: portfolio {PORTFOLIO_FILE}")
                                     _saved_count = len(_new_portfolio)
                             else:
                                 # Replace mode — save exactly what Excel has
                                 _new_portfolio.to_csv(PORTFOLIO_FILE, index=False)
-                                _sync_or_warn(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
+                                gh_save_csv(_new_portfolio, PORTFOLIO_FILE, f"Import: portfolio {PORTFOLIO_FILE}")
                                 _saved_count = len(_new_portfolio)
 
                             # ── Build trades rows (sold entries) ────────────────────────
@@ -6033,16 +5999,16 @@ with st.sidebar:
                                     _existing_tr = pd.read_csv(TRADES_FILE)
                                     _merged_tr = pd.concat([_existing_tr, _new_trades_df], ignore_index=True)
                                     _merged_tr.to_csv(TRADES_FILE, index=False)
-                                    _sync_or_warn(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
+                                    gh_save_csv(_merged_tr, TRADES_FILE, f"Import: trades {TRADES_FILE}")
                                 else:
                                     _new_trades_df.to_csv(TRADES_FILE, index=False)
-                                    _sync_or_warn(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
+                                    gh_save_csv(_new_trades_df, TRADES_FILE, f"Import: trades {TRADES_FILE}")
                             elif "🔄 Replace" in _xl_mode:
                                 pd.DataFrame(
                                     columns=["Ticker","Sell_Qty","Sell_Price","Sell_Date",
                                              "Buy_Price_At_Sell","Booked_PnL","Asset_Type"]
                                 ).to_csv(TRADES_FILE, index=False)
-                                _sync_or_warn(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
+                                _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
 
                             st.success(
                                 f"✅ Import complete! "
@@ -6098,7 +6064,7 @@ with st.sidebar:
                         df.at[idx, "Buy_Price"] = avg_price
                         df.at[idx, "Buy_Date"]  = str(buy_date)
                         df.to_csv(PORTFOLIO_FILE, index=False)
-                        _sync_or_warn(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
+                        _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                         st.success(
                             f"✅ {ticker} updated — "
                             f"New Qty: {new_qty:,.2f} | "
@@ -6111,7 +6077,7 @@ with st.sidebar:
                         )
                         df = pd.concat([df, new_row], ignore_index=True)
                         df.to_csv(PORTFOLIO_FILE, index=False)
-                        _sync_or_warn(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
+                        _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                         st.success(f"✅ {ticker} added at ₹{buy_price:,.2f}")
                     st.rerun()
 
@@ -6119,7 +6085,7 @@ with st.sidebar:
         if "Asset_Type" not in df.columns and not df.empty:
             df["Asset_Type"] = df["Ticker"].apply(classify_asset)
             df.to_csv(PORTFOLIO_FILE, index=False)
-            _sync_or_warn(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
+            _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
 
         # ── UPDATE UNLISTED SHARE CMP ──────────────────────────────
         _unlisted_holdings = df[df.get("Asset_Type", pd.Series()) == "Unlisted Share"] if "Asset_Type" in df.columns else pd.DataFrame()
@@ -6161,7 +6127,7 @@ with st.sidebar:
             if st.button("Delete Selected"):
                 df = df.drop(idx).reset_index(drop=True)
                 df.to_csv(PORTFOLIO_FILE, index=False)
-                _sync_or_warn(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
+                _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                 st.success("Holding Deleted")
                 st.rerun()
 
@@ -6229,7 +6195,7 @@ with st.sidebar:
                                      "Buy_Price_At_Sell","Booked_PnL","Asset_Type"])
                         trades_df = pd.concat([trades_df, new_trade], ignore_index=True)
                         trades_df.to_csv(TRADES_FILE, index=False)
-                        _sync_or_warn(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
+                        _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
                         st.success(
                             f"✅ Sold {sell_qty:,.0f} × {sell_ticker} @ ₹{sell_price:,.2f} | "
                             f"Buy Rate: ₹{buy_rate_input:,.2f} | "
@@ -6255,7 +6221,7 @@ with st.sidebar:
                 if st.button("🗑️ Delete Trade", key="del_trade_sidebar_btn"):
                     trades_df = trades_df.drop(_del_idx).reset_index(drop=True)
                     trades_df.to_csv(TRADES_FILE, index=False)
-                    _sync_or_warn(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
+                    _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
                     st.success("✅ Trade deleted.")
                     st.rerun()
 
@@ -6874,10 +6840,10 @@ def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
                     subset=["Ticker","Asset_Type","Buy_Date","Buy_Price","Shares"], keep="last"
                 )
                 merged.to_csv(pf_path, index=False)
-                _sync_or_warn(pf_path, pf_path, f"Import: portfolio for {cid}")
+                _local_sync_to_gh(pf_path, pf_path, f"Import: portfolio for {cid}")
             else:
                 trade_df.to_csv(pf_path, index=False)
-                _sync_or_warn(pf_path, pf_path, f"Import: portfolio for {cid}")
+                _local_sync_to_gh(pf_path, pf_path, f"Import: portfolio for {cid}")
 
             imported_trades += len(trade_df)
 
@@ -7876,7 +7842,7 @@ if _nav_tab == "Watchlist":
                             _pf.at[_idx, "Buy_Price"] = _avg_px
                             _pf.at[_idx, "Buy_Date"]  = _today_str
                             _pf.to_csv(PORTFOLIO_FILE, index=False)
-                            _sync_or_warn(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
+                            _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                             st.success(
                                 f"✅ BUY recorded — {_clean_ticker} · "
                                 f"New Qty: {_new_qty:,.2f} · Avg Price: ₹{_avg_px:,.2f}"
@@ -7893,7 +7859,7 @@ if _nav_tab == "Watchlist":
                             )
                             _pf = pd.concat([_pf, _new_row], ignore_index=True)
                             _pf.to_csv(PORTFOLIO_FILE, index=False)
-                            _sync_or_warn(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
+                            _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                             st.success(
                                 f"✅ BUY recorded — {_clean_ticker} added · "
                                 f"Qty: {_ord_qty} · Price: ₹{_ord_price:.2f}"
@@ -7923,7 +7889,7 @@ if _nav_tab == "Watchlist":
                             )
                             _tf = pd.concat([_tf, _sell_row], ignore_index=True)
                             _tf.to_csv(TRADES_FILE, index=False)
-                            _sync_or_warn(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
+                            _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
                             _pnl_str = f"{'▲' if _pnl >= 0 else '▼'} ₹{abs(_pnl):,.2f}"
                             st.success(
                                 f"✅ SELL recorded — {_clean_ticker} · "
@@ -8900,7 +8866,7 @@ if _nav_tab == "Portfolio":
                     df.drop(df[_mask].index, inplace=True)
                     df.reset_index(drop=True, inplace=True)
                     df.to_csv(PORTFOLIO_FILE, index=False)
-                    _sync_or_warn(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
+                    _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                     st.success(f"🗑️ Deleted: {', '.join(_deleted_tickers)}. Refreshing...")
                     st.rerun()
 
@@ -8920,7 +8886,7 @@ if _nav_tab == "Portfolio":
                         df.at[orig_idx, "Shares"]    = round(float(new_shares),    4)
                         df.at[orig_idx, "Buy_Price"] = round(float(new_buy_price), 4)
                     df.to_csv(PORTFOLIO_FILE, index=False)
-                    _sync_or_warn(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
+                    _local_sync_to_gh(PORTFOLIO_FILE, PORTFOLIO_FILE, 'Auto-save: portfolio')
                     st.success(f"✅ {len(changed_rows)} holding(s) updated. Refreshing...")
                     st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
@@ -9579,7 +9545,7 @@ if _nav_tab == "Portfolio":
                     trades_df.at[_si_idx, "Sell_Price"]  = round(_np, 4)
                     trades_df.at[_si_idx, "Booked_PnL"]  = _new_booked
                 trades_df.to_csv(TRADES_FILE, index=False)
-                _sync_or_warn(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
+                _local_sync_to_gh(TRADES_FILE, TRADES_FILE, 'Auto-save: trades')
                 st.success(f"✅ {len(_sell_changed)} sell trade(s) updated. Refreshing...")
                 st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
@@ -11559,20 +11525,22 @@ HIGH_PRIORITY = [
 # Headlines matching these patterns are roundup/listicle articles that mention
 # many companies — they should never be tagged to a specific stock.
 _ROUNDUP_BLOCK_PATTERNS = [
-    r"full list", r"here('s| is| are) the", r"these companies", r"among companies",
-    r"list of companies", r"list of stocks", r"companies to (declare|post|report|announce)",
-    r"stocks to watch", r"top (gainers|losers|stocks|picks)",
-    r"q\d results.*:.*among", r"among.*to (declare|post|report)",
-    r"others to (post|report|declare)", r"and (many )?others",
-    r"see (details|full list)", r"next week in stock market",
-    r"this week.*dividend", r"upcoming.*ex.?date.*these",
+    r"full list of",
+    r"list of (companies|stocks|shares)",
+    r"companies to (declare|post|report|announce)",
+    r"stocks to watch (next|this) week",
+    r"\d+ (stocks|shares|companies) (to watch|that )",
+    r"next week in stock market",
+    r"upcoming.*ex.?date.*these",
+    r"and (many )?others (to |will )",
 ]
 _ROUNDUP_RE = re.compile("|".join(_ROUNDUP_BLOCK_PATTERNS), re.IGNORECASE)
 
 def _is_roundup_article(title: str, summary: str = "") -> bool:
-    """Return True if the article is a market roundup listing multiple companies."""
-    text = (title + " " + summary).lower()
-    return bool(_ROUNDUP_RE.search(text))
+    """Return True only if TITLE clearly signals a multi-company roundup.
+    Checking only the title prevents blocking legitimate earnings articles
+    whose summaries happen to mention other companies in passing."""
+    return bool(_ROUNDUP_RE.search(title))
 
 def make_hash(text):
     return hashlib.md5(re.sub(r'\s+', ' ', text.lower().strip()).encode()).hexdigest()
@@ -11764,28 +11732,11 @@ _NEWS_GOOGLE_OVERRIDES = {
     "BOSCHLTD":      "Bosch India Limited",
 }
 
-def _resolve_company_name(ticker: str) -> str:
-    """Look up the real company name for ANY ticker from the live Angel One
-    scrip master (sym_to_name, built in load_scrip_master()). This is what
-    makes news matching work for every stock in the portfolio, not just the
-    ~90 tickers manually curated in _NEWS_TICKER_ALIASES below — small/mid
-    caps that aren't hardcoded were previously searched by raw ticker symbol,
-    which rarely appears in actual news headlines, so they returned almost
-    no results."""
-    try:
-        _map = globals().get("sym_to_name") or {}
-        return (_map.get(ticker.upper(), "") or "").strip()
-    except Exception:
-        return ""
-
 def _get_news_company_name(ticker: str) -> str:
     if ticker in _NEWS_GOOGLE_OVERRIDES:
         return _NEWS_GOOGLE_OVERRIDES[ticker]
     if ticker in _NEWS_TICKER_ALIASES:
         return _NEWS_TICKER_ALIASES[ticker][0]
-    _resolved = _resolve_company_name(ticker)
-    if _resolved:
-        return f"{_resolved} India NSE"
     return ticker
 
 def _get_news_aliases(ticker: str) -> list:
@@ -11793,10 +11744,6 @@ def _get_news_aliases(ticker: str) -> list:
     if ticker in _NEWS_TICKER_ALIASES:
         _, extra = _NEWS_TICKER_ALIASES[ticker]
         aliases += extra
-    else:
-        _resolved = _resolve_company_name(ticker)
-        if _resolved:
-            aliases.append(_resolved.lower())
     return aliases
 
 def _passes_news_disambiguation(text: str, ticker: str) -> bool:
@@ -11980,17 +11927,22 @@ def fetch_yfinance_portfolio_news(portfolio_tickers: list) -> list:
 def fetch_all_news(portfolio_tickers):
     clean_names = get_clean_ticker_names(portfolio_tickers)
     all_news = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
         futures = []
         for feed_name, url in RSS_FEEDS.items():
             futures.append(executor.submit(fetch_rss, feed_name, url))
         for name in clean_names:
             sname = _get_news_company_name(name)
+            # Core queries — company name + common financial events
             futures.append(executor.submit(fetch_google_news_query, sname, name))
-            futures.append(executor.submit(fetch_google_news_query, f"{sname} NSE results", name))
-            futures.append(executor.submit(fetch_google_news_query, f"{sname} dividend bonus", name))
-            futures.append(executor.submit(fetch_google_news_query, f"{sname} quarterly profit India", name))
+            futures.append(executor.submit(fetch_google_news_query, f"{sname} NSE", name))
+            futures.append(executor.submit(fetch_google_news_query, f"{sname} results earnings", name))
+            futures.append(executor.submit(fetch_google_news_query, f"{sname} quarterly profit revenue India", name))
+            futures.append(executor.submit(fetch_google_news_query, f"{sname} dividend bonus rights", name))
             futures.append(executor.submit(fetch_google_news_query, f"{sname} order win acquisition merger", name))
+            futures.append(executor.submit(fetch_google_news_query, f"{sname} share price target analyst", name))
+            futures.append(executor.submit(fetch_google_news_query, f"{sname} Q1 Q2 Q3 Q4 FY27", name))
+            futures.append(executor.submit(fetch_google_news_query, f"{name} NSE India stock", name))
         futures.append(executor.submit(fetch_bse_corporate_news, clean_names))
         futures.append(executor.submit(fetch_yfinance_portfolio_news, portfolio_tickers))
         for future in concurrent.futures.as_completed(futures):
@@ -12024,11 +11976,22 @@ def get_filtered_news(portfolio_tickers):
             continue
         if "_force_ticker" in item:
             stock_tag = item["_force_ticker"]
-            # Even for force_ticker, require alias appears in the TITLE
-            # to prevent roundup articles being tagged to a specific stock
+            # Check that at least one alias appears in title OR summary.
+            # Title-only was too strict — many valid articles (e.g. "Earnings Call
+            # Highlights" from Yahoo Finance) have the company name only in summary.
             _aliases = _get_news_aliases(stock_tag)
+            text_lower = text.lower()
             title_lower = title.lower()
-            if not any(alias in title_lower for alias in _aliases):
+            alias_in_text = False
+            for _a in _aliases:
+                if len(_a) <= 4:
+                    # short alias — word-boundary check to avoid false positives
+                    if re.search(r'(?<![a-z0-9])' + re.escape(_a) + r'(?![a-z0-9])', text_lower):
+                        alias_in_text = True; break
+                else:
+                    if _a in text_lower:
+                        alias_in_text = True; break
+            if not alias_in_text:
                 continue
             if not _passes_news_disambiguation(text, stock_tag):
                 continue
