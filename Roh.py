@@ -15711,8 +15711,8 @@ if _nav_tab == "Results Monitor":
         with _nc1:
             st.markdown("#### 📱 Telegram (Free)")
             st.markdown("1. Search **@BotFather** on Telegram\n2. `/newbot` → get **Bot Token**\n3. Send any message to your bot\n4. Visit `https://api.telegram.org/bot<TOKEN>/getUpdates` → get **Chat ID**")
-            _tg_tok = st.text_input("Bot Token", key="rm_tg_token", placeholder="1234567890:ABCdef...", value=st.session_state.get("rm_tg_tok_sv",""))
-            _tg_cid = st.text_input("Chat ID",   key="rm_tg_chat",  placeholder="123456789",           value=st.session_state.get("rm_tg_cid_sv",""))
+            _tg_tok = st.text_input("Bot Token", key="rm_tg_token", placeholder="1234567890:ABCdef...", value=st.session_state.get("rm_tg_tok_sv","8980379396:AAEWET_UzwkAwyaYDtzu3zm9WN81Ce2eU3g"))
+            _tg_cid = st.text_input("Chat ID",   key="rm_tg_chat",  placeholder="123456789",           value=st.session_state.get("rm_tg_cid_sv","968569455"))
             if st.button("Test Telegram", key="rm_tg_test"):
                 if _tg_tok and _tg_cid:
                     try:
@@ -15826,8 +15826,8 @@ if _nav_tab == "Results Monitor":
     with st.spinner("Fetching NSE results..."): _rm_data, _rm_at = _rm_fetch()
     st.caption(f"Last fetched: {_rm_at} — auto-refreshes every 2 min")
 
-    _tg_tok_v  = st.session_state.get("rm_tg_tok_sv","")
-    _tg_cid_v  = st.session_state.get("rm_tg_cid_sv","")
+    _tg_tok_v  = st.session_state.get("rm_tg_tok_sv","8980379396:AAEWET_UzwkAwyaYDtzu3zm9WN81Ce2eU3g")
+    _tg_cid_v  = st.session_state.get("rm_tg_cid_sv","968569455")
     _em_to_v   = st.session_state.get("rm_em_to_sv","")
     _em_from_v = st.session_state.get("rm_em_from_sv","")
     _em_pw_v   = st.session_state.get("rm_em_pw_sv","")
