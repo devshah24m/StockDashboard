@@ -15863,7 +15863,48 @@ if _nav_tab == "Results Monitor":
         _dd = list(_pub.values()) + list(_sched.values())
         return _dd, datetime.now(_IST2).strftime("%I:%M:%S %p IST"), _raw_dbg
 
-    _rcc1,_rcc2,_rcc3 = st.columns([3,1,1])
+    @st.cache_data(ttl=120)
+    def _rm_direct_check(_syms_tuple):
+        """Direct per-symbol query against NSE — bypasses the bulk list entirely.
+        Used as a fallback for portfolio stocks so a lag/gap in the bulk feed
+        doesn't hide a result that NSE already has on file for that symbol."""
+        _IST3 = timezone(timedelta(hours=5, minutes=30))
+        _hd3  = {"User-Agent":"Mozilla/5.0","Accept":"application/json","Referer":"https://www.nseindia.com/"}
+        _found = {}
+        _dbg3  = {}
+        try:
+            _ss3 = requests.Session()
+            _ss3.get("https://www.nseindia.com", headers=_hd3, timeout=8)
+            _from3 = (datetime.now(_IST3) - timedelta(days=14)).strftime("%d-%m-%Y")
+            _to3   = datetime.now(_IST3).strftime("%d-%m-%Y")
+            for _sym3 in _syms_tuple:
+                _hits3 = []
+                for _per3 in ("Quarterly", "Half-Yearly", "Annual", "Others"):
+                    try:
+                        _r3 = _ss3.get(
+                            f"https://www.nseindia.com/api/corporates-financial-results?index=equities&period={_per3}&symbol={_sym3}&from_date={_from3}&to_date={_to3}",
+                            headers=_hd3, timeout=10)
+                        if _r3.status_code == 200:
+                            _j3 = _r3.json()
+                            _c3 = _j3 if isinstance(_j3, list) else _j3.get("data", [])
+                            _hits3.extend(_c3)
+                    except Exception: pass
+                if _hits3:
+                    _dbg3[_sym3] = _hits3[:2]
+                    _hits3.sort(key=lambda r: str(r.get("broadCastDate","")), reverse=True)
+                    _top3 = _hits3[0]
+                    _dt3  = str(_top3.get("broadCastDate","")).strip()
+                    _dtonly3 = _dt3.split(" ")[0]
+                    _lnk3 = str(_top3.get("xbrl","")).strip()
+                    if _lnk3 and _lnk3.startswith("/"): _lnk3 = "https://nsearchives.nseindia.com" + _lnk3
+                    _found[_sym3] = {"symbol":_sym3,"broadCastDate":_dt3,"date_only":_dtonly3,
+                                      "purpose":f"Financial Results — {_top3.get('relatingTo','')}",
+                                      "time": _dt3.split(" ")[1] if " " in _dt3 else "",
+                                      "link":_lnk3}
+        except Exception as _e3: _dbg3["error"] = str(_e3)
+        return _found, _dbg3
+
+
     with _rcc1: st.markdown(f"**📅 Today: {_ist_now_rm.strftime('%d %b %Y')}**")
     with _rcc2: _auto_rm = st.toggle("Auto Refresh", value=False, key="rm_auto")
     with _rcc3:
@@ -15884,6 +15925,29 @@ if _nav_tab == "Results Monitor":
 
     try: _pf_syms = {str(t).upper().replace(".NS","").replace(".BO","") for t in df["Ticker"].unique()} if not df.empty else set()
     except Exception: _pf_syms = set()
+
+    # Portfolio symbols the bulk feed says are NOT yet published — double-check these
+    # directly against NSE per-symbol, since the bulk list can lag behind reality.
+    _bulk_pub_syms = {r["symbol"].upper() for r in _rm_data if r.get("status") == "published"}
+    _pf_to_check = tuple(sorted(_pf_syms - _bulk_pub_syms))
+    _direct_found, _direct_dbg = ({}, {})
+    if _pf_to_check:
+        with st.spinner(f"Double-checking {len(_pf_to_check)} portfolio symbol(s) directly with NSE..."):
+            _direct_found, _direct_dbg = _rm_direct_check(_pf_to_check)
+    _today_dmy_main = _ist_now_rm.strftime("%d-%b-%Y")
+    for _dsym, _drec in _direct_found.items():
+        if _drec.get("date_only") != _today_dmy_main:
+            continue  # not today's filing — leave as scheduled/absent, don't falsely flag as published
+        # Merge in — mark published, tag source so it's clear this came from the direct check
+        _rm_data = [r for r in _rm_data if r["symbol"].upper() != _dsym]  # drop any stale "scheduled" entry
+        _rm_data.append({"symbol":_dsym, "purpose":_drec["purpose"], "time":_drec["time"],
+                          "source":"NSE Direct Check", "link":_drec["link"], "status":"published"})
+    if _direct_dbg:
+        with st.expander("🔎 Direct per-symbol NSE check (portfolio only)", expanded=False):
+            st.json(_direct_dbg)
+            st.caption("Shows raw NSE hits found by querying each portfolio symbol individually, "
+                       "even if it didn't appear in the bulk list above. If a symbol you expect isn't "
+                       "listed here at all, NSE genuinely has no filing on record for it yet.")
 
     _only_pf_rm = st.toggle("🔔 Alert only for my portfolio stocks", value=True, key="rm_pf_only")
 
