@@ -6580,10 +6580,10 @@ def _mi_client_template() -> bytes:
     return buf.getvalue()
 
 
-def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
-                            client_portfolio_file_fn, client_trades_file_fn,
-                            dev_code_ref):
-    """Combined Master Import: one Excel creates clients + their portfolios in one shot."""
+def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn, dev_code_ref):
+    """Combined Master Import: one Excel creates clients + their portfolios in one shot.
+    100% GitHub-direct — reads existing portfolios from GitHub, writes new ones straight
+    to GitHub. No local disk file is ever created or relied on for this tab."""
 
     st.markdown("""
 <div style="background:linear-gradient(135deg,#0f0f23,#1a1a3e);border:1px solid #2a2a5a;
@@ -6748,6 +6748,12 @@ def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
             "Add GITHUB_TOKEN (and GITHUB_REPO / GITHUB_BRANCH if needed) under Settings → Secrets before importing."
         )
 
+    def _mi_gh_portfolio_path(cid):
+        """Same naming convention as client_portfolio_file(), but this is just the
+        GitHub path string — no local file is touched to compute it."""
+        safe = re.sub(r"[^\w\-]", "_", str(cid).strip().upper())
+        return f"portfolio_{safe}.csv"
+
     def _do_import(overwrite_existing: bool):
         imported_clients  = 0
         skipped_clients   = 0
@@ -6758,7 +6764,7 @@ def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
             cname = grp["Client Name"].iloc[0]
             cpw   = grp["Password"].iloc[0]
 
-            # ── Create / update client account ──
+            # ── Create / update client account (in-memory only — pushed to GitHub below) ──
             if cid not in clients_dict_ref:
                 clients_dict_ref[cid] = {
                     "display_name":  cname,
@@ -6774,7 +6780,7 @@ def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
             else:
                 skipped_clients += 1
 
-            # ── Save portfolio CSV ──
+            # ── Build this client's trade rows ──
             trade_cols = ["Stock Name","Asset Class","Buy Price","Buy Qty","Buy Date","Sell Qty","Sell Price","Sell Date"]
             trade_df = grp[trade_cols].copy()
 
@@ -6791,25 +6797,27 @@ def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
                 "Asset Class": "Asset_Type",
             })
 
-            pf_path = client_portfolio_file_fn(cid)
+            gh_path = _mi_gh_portfolio_path(cid)
 
-            if os.path.exists(pf_path) and not overwrite_existing:
-                # Merge / deduplicate
-                existing_pf = pd.read_csv(pf_path)
-                merged = pd.concat([existing_pf, trade_df], ignore_index=True).drop_duplicates(
-                    subset=["Ticker","Asset_Type","Buy_Date","Buy_Price","Shares"], keep="last"
-                )
-                merged.to_csv(pf_path, index=False)
-                if not _local_sync_to_gh(pf_path, pf_path, f"Import: portfolio for {cid}"):
-                    gh_failures.append((f"Portfolio for {cid}", pf_path))
+            # ── Read any existing portfolio DIRECTLY from GitHub (no local disk) ──
+            if not overwrite_existing:
+                existing_pf = gh_read_csv(gh_path)   # empty DataFrame if it doesn't exist yet
+                if not existing_pf.empty:
+                    merged = pd.concat([existing_pf, trade_df], ignore_index=True).drop_duplicates(
+                        subset=["Ticker","Asset_Type","Buy_Date","Buy_Price","Shares"], keep="last"
+                    )
+                else:
+                    merged = trade_df
             else:
-                trade_df.to_csv(pf_path, index=False)
-                if not _local_sync_to_gh(pf_path, pf_path, f"Import: portfolio for {cid}"):
-                    gh_failures.append((f"Portfolio for {cid}", pf_path))
+                merged = trade_df
+
+            # ── Write DIRECTLY to GitHub (no local disk) ──
+            if not gh_write_csv(merged, gh_path, f"Import: portfolio for {cid}"):
+                gh_failures.append((f"Portfolio for {cid}", gh_path))
 
             imported_trades += len(trade_df)
 
-        # ── Save clients.json ──
+        # ── Save clients.json — DIRECTLY to GitHub ──
         if not save_clients_fn(clients_dict_ref):
             gh_failures.append(("clients.json (all client accounts)", CLIENTS_FILE))
 
@@ -15744,8 +15752,6 @@ if _nav_tab == "Master Import" and _is_dev:
         clients_dict_ref=clients_dict,
         save_clients_fn=save_clients,
         hash_pw_fn=hash_password,
-        client_portfolio_file_fn=client_portfolio_file,
-        client_trades_file_fn=client_trades_file,
         dev_code_ref=DEV_CODE,
     )
 
