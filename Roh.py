@@ -12111,7 +12111,7 @@ def get_results_calendar(portfolio_tickers):
         "Referer": "https://www.nseindia.com/",
     }
 
-    today = pd.Timestamp.now().normalize()
+    today = pd.Timestamp.now(tz='Asia/Kolkata').normalize().tz_localize(None)  # IST date
     window_end = today + pd.Timedelta(days=90)  # look 90 days ahead for ex-dates
 
     # ── Build a lookup: symbol → list of corporate action details from NSE CA API ──
@@ -12281,8 +12281,8 @@ def get_results_calendar(portfolio_tickers):
             if ev_date is None:
                 continue
 
-            # Only today → +30 days for board meeting / announcement date
-            if ev_date < today or ev_date > today + pd.Timedelta(days=30):
+            # today → +30 days for board meeting / announcement date (include today)
+            if ev_date < today - pd.Timedelta(days=1) or ev_date > today + pd.Timedelta(days=30):
                 continue
 
             event = canonical_event(event_raw)
@@ -14941,10 +14941,10 @@ if _nav_tab == "All Corporate Actions":
             return f"✅ {d}d ago"
 
     # ── Compute date range from window selection ──────────────────────
-    today_ts3 = pd.Timestamp.now().normalize()
+    today_ts3 = pd.Timestamp.now(tz='Asia/Kolkata').normalize().tz_localize(None)  # IST date
 
     window_ranges = {
-        "Today":         (today_ts3, today_ts3),
+        "Today":         (today_ts3, today_ts3 + pd.Timedelta(days=1)),
         "This Week":     (today_ts3, today_ts3 + pd.Timedelta(days=6 - today_ts3.weekday())),
         "Next 7 Days":   (today_ts3, today_ts3 + pd.Timedelta(days=7)),
         "Next 30 Days":  (today_ts3, today_ts3 + pd.Timedelta(days=30)),
