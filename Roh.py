@@ -1009,6 +1009,7 @@ def gh_write_file(path, text, msg=None):
     """Write text to GitHub file. Returns True on success."""
     if not _GH_TOKEN:
         print("[GH] No token — skipping write")
+        _GH_LAST_ERRORS[path] = "No GITHUB_TOKEN configured in st.secrets — write was never attempted."
         return False
     try:
         # Get existing SHA
@@ -6747,6 +6748,17 @@ def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn, dev_co
             "all imported clients/portfolios will be **lost on the next reboot**. "
             "Add GITHUB_TOKEN (and GITHUB_REPO / GITHUB_BRANCH if needed) under Settings → Secrets before importing."
         )
+
+    with st.expander("🔧 GitHub connection debug (tap to check before importing)", expanded=False):
+        st.write(f"**Token configured:** {'✅ yes (' + str(len(_GH_TOKEN)) + ' chars)' if _GH_TOKEN else '❌ NO'}")
+        st.write(f"**Repo:** `{_GH_REPO}`")
+        st.write(f"**Branch:** `{_GH_BRANCH}`")
+        if st.button("▶️ Test write clients.json right now", key="mi_gh_test"):
+            _test_ok = save_clients_fn(clients_dict_ref)
+            if _test_ok:
+                st.success("✅ Test write to clients.json succeeded.")
+            else:
+                st.error(f"❌ Test write failed: `{_GH_LAST_ERRORS.get(CLIENTS_FILE, 'no error captured')}`")
 
     def _mi_gh_portfolio_path(cid):
         """Same naming convention as client_portfolio_file(), but this is just the
