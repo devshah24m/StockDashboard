@@ -15894,6 +15894,23 @@ if _nav_tab == "Results Monitor":
                 # Always record diagnostics for this symbol, even with zero hits,
                 # so silent NSE blocking/rate-limiting is visible instead of invisible.
                 _dbg3[_sym3] = {"http_statuses": _statuses3, "hits_found": len(_hits3)}
+                # ALSO check the faster corporate-announcements feed (Outcome of Board
+                # Meeting notices) — NSE typically posts these before the structured
+                # XBRL financial-results filing is validated and indexed, sometimes by hours.
+                try:
+                    _ra3 = _ss3.get(
+                        f"https://www.nseindia.com/api/corporate-announcements?index=equities&symbol={_sym3}&from_date={_from3}&to_date={_to3}",
+                        headers=_hd3, timeout=10)
+                    _dbg3[_sym3]["announcements_http"] = _ra3.status_code
+                    if _ra3.status_code == 200:
+                        _ja3 = _ra3.json()
+                        _ann_list3 = _ja3 if isinstance(_ja3, list) else _ja3.get("data", [])
+                        _res_ann3 = [a for a in _ann_list3 if any(
+                            k in str(a.get("desc","") or a.get("subject","") or a.get("attchmntText","")).lower()
+                            for k in ("financial result", "outcome of board meeting", "un-audited", "unaudited", "audited financial"))]
+                        _dbg3[_sym3]["announcements_found"] = len(_res_ann3)
+                        if _res_ann3: _dbg3[_sym3]["announcement_sample"] = _res_ann3[0]
+                except Exception as _eann: _dbg3[_sym3]["announcements_error"] = str(_eann)
                 if _hits3:
                     _dbg3[_sym3]["sample"] = _hits3[0]
                     _hits3.sort(key=lambda r: str(r.get("broadCastDate","")), reverse=True)
@@ -15906,6 +15923,18 @@ if _nav_tab == "Results Monitor":
                                       "purpose":f"Financial Results — {_top3.get('relatingTo','')}",
                                       "time": _dt3.split(" ")[1] if " " in _dt3 else "",
                                       "link":_lnk3}
+                elif _dbg3[_sym3].get("announcements_found"):
+                    # No structured XBRL filing yet, but NSE's announcements feed has a
+                    # matching disclosure — surface it now rather than waiting hours for XBRL.
+                    _ann3 = _dbg3[_sym3]["announcement_sample"]
+                    _adt3 = str(_ann3.get("an_dt","") or _ann3.get("broadcastdt","") or _ann3.get("attchmntFile","")).strip()
+                    _adtonly3 = _adt3.split(" ")[0] if _adt3 else ""
+                    _alnk3 = str(_ann3.get("attchmntFile","")).strip()
+                    if _alnk3 and _alnk3.startswith("/"): _alnk3 = "https://nsearchives.nseindia.com" + _alnk3
+                    _found[_sym3] = {"symbol":_sym3,"broadCastDate":_adt3,"date_only":_adtonly3,
+                                      "purpose":"Financial Results (announcement — XBRL filing pending)",
+                                      "time": _adt3.split(" ")[1] if " " in _adt3 else "",
+                                      "link":_alnk3}
         except Exception as _e3: _dbg3["error"] = str(_e3)
         return _found, _dbg3
 
@@ -15955,9 +15984,11 @@ if _nav_tab == "Results Monitor":
         with st.expander(f"🔎 Direct per-symbol NSE check ({len(_pf_to_check)} portfolio symbol(s) on today's calendar)", expanded=False):
             st.json(_direct_dbg)
             st.caption("Shows raw NSE hits (and HTTP status per period) for each portfolio symbol checked "
-                       "individually. All-non-200 statuses across every symbol usually means NSE rate-limited "
-                       "this check — try Refresh again in a minute. hits_found:0 with 200 statuses means NSE "
-                       "genuinely has no filing on record for that symbol yet.")
+                       "individually, PLUS a check of NSE's faster 'corporate-announcements' feed (Outcome of "
+                       "Board Meeting notices), which often appears before the structured financial-results "
+                       "filing is validated and indexed. All-non-200 statuses usually means NSE rate-limited "
+                       "this check — try Refresh again in a minute. hits_found:0 and announcements_found:0 with "
+                       "200 statuses means NSE genuinely has nothing on record for that symbol yet.")
 
     _only_pf_rm = st.toggle("🔔 Alert only for my portfolio stocks", value=True, key="rm_pf_only")
 
