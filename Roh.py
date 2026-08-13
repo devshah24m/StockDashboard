@@ -1367,6 +1367,7 @@ with st.sidebar:
         ("Reports & Export",      "📄 Reports & Export"),
         ("CRR Reconciliation",    "📁 CRR Reconciliation"),
         ("All Corporate Actions", "🏦 All Corporate Actions"),
+        ("Results Monitor",     "🔔 Results Monitor"),
     ]
 
     _cur_nav = st.session_state.get("nav_tab", "Portfolio")
@@ -15692,3 +15693,185 @@ if _nav_tab == "Master Import" and _is_dev:
         client_trades_file_fn=client_trades_file,
         dev_code_ref=DEV_CODE,
     )
+
+# ══════════════════════════════════════════════
+# RESULTS MONITOR TAB
+# ══════════════════════════════════════════════
+
+if _nav_tab == "Results Monitor":
+    import time as _time_rm
+    _IST_RM = timezone(timedelta(hours=5, minutes=30))
+    _ist_now_rm = datetime.now(_IST_RM)
+    _today_rm = _ist_now_rm.strftime("%d-%m-%Y")
+
+    st.markdown("<div style='background:#13132a;border:1px solid #2a2a5a;border-radius:12px;padding:16px 24px;margin-bottom:18px;'><div style='font-size:20px;font-weight:800;color:#f0f2ff;'>🔔 Results Monitor</div><div style='font-size:12px;color:#8888aa;margin-top:4px;'>Live NSE results feed — auto alerts via Telegram or Email</div></div>", unsafe_allow_html=True)
+
+    with st.expander("⚙️ Alert Settings", expanded=False):
+        _nc1, _nc2 = st.columns(2)
+        with _nc1:
+            st.markdown("#### 📱 Telegram (Free)")
+            st.markdown("1. Search **@BotFather** on Telegram\n2. `/newbot` → get **Bot Token**\n3. Send any message to your bot\n4. Visit `https://api.telegram.org/bot<TOKEN>/getUpdates` → get **Chat ID**")
+            _tg_tok = st.text_input("Bot Token", key="rm_tg_token", placeholder="1234567890:ABCdef...", value=st.session_state.get("rm_tg_tok_sv",""))
+            _tg_cid = st.text_input("Chat ID",   key="rm_tg_chat",  placeholder="123456789",           value=st.session_state.get("rm_tg_cid_sv",""))
+            if st.button("Test Telegram", key="rm_tg_test"):
+                if _tg_tok and _tg_cid:
+                    try:
+                        _test_txt = "\U0001f514 Results Monitor Test\n\nYour NSE alert is working!"
+                        _tb = json.dumps({"chat_id":_tg_cid,"text":_test_txt,"parse_mode":"Markdown"}).encode()
+                        _tr = urllib.request.Request(f"https://api.telegram.org/bot{_tg_tok}/sendMessage", data=_tb, headers={"Content-Type":"application/json"}, method="POST")
+                        with urllib.request.urlopen(_tr, timeout=10) as _rr:
+                            _tres = json.loads(_rr.read())
+                        if _tres.get("ok"):
+                            st.success("✅ Sent!")
+                            st.session_state["rm_tg_tok_sv"] = _tg_tok
+                            st.session_state["rm_tg_cid_sv"] = _tg_cid
+                        else:
+                            st.error(str(_tres))
+                    except Exception as _te:
+                        st.error(str(_te))
+                else:
+                    st.warning("Enter Token and Chat ID first.")
+        with _nc2:
+            st.markdown("#### 📧 Email Alert")
+            _em_to   = st.text_input("Send to",      key="rm_em_to",   placeholder="you@gmail.com",    value=st.session_state.get("rm_em_to_sv",""))
+            _em_from = st.text_input("Your Gmail",   key="rm_em_from", placeholder="sender@gmail.com", value=st.session_state.get("rm_em_from_sv",""))
+            _em_pw   = st.text_input("App Password", key="rm_em_pw",   type="password",                value=st.session_state.get("rm_em_pw_sv",""))
+            if st.button("Test Email", key="rm_em_test"):
+                if _em_to and _em_from and _em_pw:
+                    try:
+                        from email.mime.text import MIMEText as _MTrm
+                        _em2 = _MTrm("NSE Results Monitor — email alert is working!")
+                        _em2["Subject"] = "NSE Results Monitor — Test"
+                        _em2["From"] = _em_from; _em2["To"] = _em_to
+                        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as _srv2:
+                            _srv2.login(_em_from, _em_pw)
+                            _srv2.sendmail(_em_from, _em_to, _em2.as_string())
+                        st.success("✅ Sent!")
+                        st.session_state["rm_em_to_sv"]   = _em_to
+                        st.session_state["rm_em_from_sv"] = _em_from
+                        st.session_state["rm_em_pw_sv"]   = _em_pw
+                    except Exception as _ee:
+                        st.error(str(_ee))
+                else:
+                    st.warning("Fill all three fields.")
+        if st.button("💾 Save Settings", key="rm_save"):
+            st.session_state["rm_tg_tok_sv"]  = st.session_state.get("rm_tg_token","")
+            st.session_state["rm_tg_cid_sv"]  = st.session_state.get("rm_tg_chat","")
+            st.session_state["rm_em_to_sv"]   = st.session_state.get("rm_em_to","")
+            st.session_state["rm_em_from_sv"] = st.session_state.get("rm_em_from","")
+            st.session_state["rm_em_pw_sv"]   = st.session_state.get("rm_em_pw","")
+            st.success("✅ Saved!")
+
+    def _rm_tg_send(tok, cid, txt):
+        try:
+            _b = json.dumps({"chat_id":cid,"text":txt,"parse_mode":"Markdown"}).encode()
+            _q = urllib.request.Request(f"https://api.telegram.org/bot{tok}/sendMessage", data=_b, headers={"Content-Type":"application/json"}, method="POST")
+            with urllib.request.urlopen(_q, timeout=8) as _r: return json.loads(_r.read()).get("ok",False)
+        except Exception: return False
+
+    def _rm_em_send(frm, pw, to, subj, body):
+        try:
+            from email.mime.text import MIMEText as _MT3
+            _m3 = _MT3(body); _m3["Subject"]=subj; _m3["From"]=frm; _m3["To"]=to
+            with smtplib.SMTP_SSL("smtp.gmail.com",465) as _s3:
+                _s3.login(frm,pw); _s3.sendmail(frm,to,_m3.as_string())
+            return True
+        except Exception: return False
+
+    @st.cache_data(ttl=120)
+    def _rm_fetch():
+        _IST2 = timezone(timedelta(hours=5, minutes=30))
+        _td   = datetime.now(_IST2).strftime("%d-%m-%Y")
+        _hd   = {"User-Agent":"Mozilla/5.0","Accept":"application/json","Referer":"https://www.nseindia.com/"}
+        _out  = []
+        try:
+            _ss1 = requests.Session()
+            _ss1.get("https://www.nseindia.com", headers=_hd, timeout=8)
+            _rsp1 = _ss1.get(f"https://www.nseindia.com/api/event-calendar?index=equities&from_date={_td}&to_date={_td}", headers=_hd, timeout=10)
+            if _rsp1.status_code == 200:
+                _it1 = _rsp1.json() if isinstance(_rsp1.json(), list) else _rsp1.json().get("data",[])
+                for _x in _it1:
+                    _p = str(_x.get("purpose","")).strip()
+                    if any(_k in _p.lower() for _k in ["financial result","quarterly result","annual result","half yearly","result"]):
+                        _out.append({"symbol":str(_x.get("symbol","")).strip(),"purpose":_p,"time":"","source":"NSE Calendar"})
+        except Exception: pass
+        try:
+            _ss2 = requests.Session()
+            _ss2.get("https://www.nseindia.com", headers=_hd, timeout=8)
+            _rsp2 = _ss2.get(f"https://www.nseindia.com/api/corporate-filings?index=financialResults&from_date={_td}&to_date={_td}", headers=_hd, timeout=10)
+            if _rsp2.status_code == 200:
+                _it2 = _rsp2.json() if isinstance(_rsp2.json(), list) else _rsp2.json().get("data",[])
+                for _x2 in _it2:
+                    _sym2 = str(_x2.get("symbol", _x2.get("companyName",""))).strip()
+                    _per2 = str(_x2.get("period","")).strip()
+                    _tm2  = str(_x2.get("submissionTime", _x2.get("filingTime",""))).strip()
+                    if _sym2:
+                        _out.append({"symbol":_sym2,"purpose":f"Financial Results{chr(32)+chr(8212)+chr(32)+_per2 if _per2 else chr(32)}","time":_tm2,"source":"NSE Filings"})
+        except Exception: pass
+        _seen3,_dd=[],[] 
+        for _i in _out:
+            if _i["symbol"].upper() not in _seen3:
+                _seen3.append(_i["symbol"].upper()); _dd.append(_i)
+        return _dd, datetime.now(_IST2).strftime("%I:%M:%S %p IST")
+
+    _rcc1,_rcc2,_rcc3 = st.columns([3,1,1])
+    with _rcc1: st.markdown(f"**📅 Today: {_ist_now_rm.strftime('%d %b %Y')}**")
+    with _rcc2: _auto_rm = st.toggle("Auto Refresh", value=False, key="rm_auto")
+    with _rcc3:
+        if st.button("🔄 Refresh", key="rm_ref"):
+            st.cache_data.clear(); st.rerun()
+
+    with st.spinner("Fetching NSE results..."): _rm_data, _rm_at = _rm_fetch()
+    st.caption(f"Last fetched: {_rm_at} — auto-refreshes every 2 min")
+
+    _tg_tok_v  = st.session_state.get("rm_tg_tok_sv","")
+    _tg_cid_v  = st.session_state.get("rm_tg_cid_sv","")
+    _em_to_v   = st.session_state.get("rm_em_to_sv","")
+    _em_from_v = st.session_state.get("rm_em_from_sv","")
+    _em_pw_v   = st.session_state.get("rm_em_pw_sv","")
+
+    _prev_seen = set(st.session_state.get("rm_seen_syms",[]))
+    _new_r     = [r for r in _rm_data if r["symbol"].upper() not in _prev_seen]
+    if _new_r:
+        _al = "\U0001f514 *NSE Results Published*\n\n" + "\n".join(
+            f"\u2022 *{r['symbol']}* \u2014 {r['purpose']}" + (f" @ {r['time']}" if r["time"] else "")
+            for r in _new_r
+        ) + f"\n\n\U0001f4c5 {_ist_now_rm.strftime('%d %b %Y, %I:%M %p IST')}"
+        if _tg_tok_v and _tg_cid_v: _rm_tg_send(_tg_tok_v, _tg_cid_v, _al)
+        if _em_to_v and _em_from_v and _em_pw_v: _rm_em_send(_em_from_v,_em_pw_v,_em_to_v,f"NSE Results — {len(_new_r)} new",_al.replace("*",""))
+        st.success(f"🔔 {len(_new_r)} new result(s) — alert sent!")
+    st.session_state["rm_seen_syms"] = list(_prev_seen | {r["symbol"].upper() for r in _rm_data})
+
+    if not _rm_data:
+        st.info("📭 No results yet for today. NSE publishes between 4 PM – 11 PM IST.")
+    else:
+        try: _pf_syms = {str(t).upper().replace(".NS","").replace(".BO","") for t in portfolio_tickers}
+        except Exception: _pf_syms = set()
+        st.markdown(f"### 📋 {len(_rm_data)} Result(s) Today")
+        for _rr in _rm_data:
+            _su = _rr["symbol"].upper()
+            _ip = _su in _pf_syms
+            _bc2 = "#f85454" if _ip else "#2a2a5a"
+            _bg2 = "<span style='background:#f85454;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;margin-left:8px;'>IN PORTFOLIO</span>" if _ip else ""
+            _tm2 = _rr["time"] if _rr["time"] else "—"
+            st.markdown(
+                f"<div style='background:#13132a;border:1.5px solid {_bc2};border-radius:10px;padding:14px 18px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;'>"
+                f"<div><span style='font-size:16px;font-weight:800;color:#e0e3ff;'>{_rr['symbol']}</span>{_bg2}"
+                f"<div style='font-size:12px;color:#8888aa;margin-top:4px;'>{_rr['purpose']}</div></div>"
+                f"<div style='text-align:right;'><div style='font-size:12px;color:#22d67b;font-weight:600;'>{_rr['source']}</div>"
+                f"<div style='font-size:11px;color:#5a5f88;'>{_tm2}</div></div></div>",
+                unsafe_allow_html=True)
+        st.markdown("---")
+        if st.button("📤 Send All as Alert", key="rm_manual", type="primary"):
+            _ma = "\U0001f4cb *NSE Results \u2014 " + _ist_now_rm.strftime("%d %b %Y") + "*\n\n" + "\n".join(
+                f"\u2022 *{r['symbol']}* \u2014 {r['purpose']}" + (f" @ {r['time']}" if r["time"] else "")
+                for r in _rm_data)
+            _sent2 = False
+            if _tg_tok_v and _tg_cid_v:
+                if _rm_tg_send(_tg_tok_v, _tg_cid_v, _ma): st.success("✅ Sent to Telegram!"); _sent2=True
+                else: st.error("Telegram failed — check token/chat ID.")
+            if _em_to_v and _em_from_v and _em_pw_v:
+                if _rm_em_send(_em_from_v,_em_pw_v,_em_to_v,f"NSE Results {_ist_now_rm.strftime('%d %b %Y')}",_ma.replace("*","")): st.success("✅ Email sent!"); _sent2=True
+            if not _sent2: st.warning("Configure Telegram or Email in Alert Settings first.")
+
+    if _auto_rm: _time_rm.sleep(120); st.rerun()
