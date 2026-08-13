@@ -973,13 +973,11 @@ except Exception:
     pass
 
 # =========================================================
-# GITHUB PERSISTENCE LAYER
+# GITHUB PERSISTENCE LAYER  — 100% in-memory, no local disk
 # =========================================================
 
-import base64, urllib.request, urllib.error
+import base64 as _b64, urllib.request as _ur, urllib.error as _ue
 
-# ── Credentials from Streamlit secrets ───────────────────────────
-# st.secrets doesn't support .get() on all Streamlit versions — use try/except
 try:    _GH_TOKEN  = st.secrets["GITHUB_TOKEN"]
 except: _GH_TOKEN  = ""
 try:    _GH_REPO   = st.secrets["GITHUB_REPO"]
@@ -987,167 +985,111 @@ except: _GH_REPO   = "devshah24m/stockdashboard"
 try:    _GH_BRANCH = st.secrets["GITHUB_BRANCH"]
 except: _GH_BRANCH = "main"
 
-# Warn loudly if token is missing so it's easy to diagnose
-if not _GH_TOKEN:
-    import warnings
-    warnings.warn("[NBS] GITHUB_TOKEN not found in st.secrets — all data reads/writes will fail!", stacklevel=2)
-
-def _gh_api(path):
-    return f"https://api.github.com/repos/{_GH_REPO}/contents/{path}"
-
 def _gh_headers():
-    return {
-        "Authorization": f"token {_GH_TOKEN}",
-        "Content-Type": "application/json",
-        "User-Agent": "northeast-portfolio-app"
-    }
-
-def gh_get_sha(path):
-    """Get the current SHA of a file on GitHub (needed for updates). Returns None if not found."""
-    try:
-        req = urllib.request.Request(
-            _gh_api(path) + f"?ref={_GH_BRANCH}",
-            headers=_gh_headers()
-        )
-        with urllib.request.urlopen(req) as resp:
-            return json.loads(resp.read()).get("sha")
-    except Exception:
-        return None
+    return {"Authorization": f"token {_GH_TOKEN}",
+            "Content-Type": "application/json",
+            "User-Agent": "nbs-app"}
 
 def gh_read_file(path):
-    """Read a file from GitHub. Returns (content_str, sha) or (None, None)."""
+    """Read file from GitHub → returns (text, sha) or (None, None)."""
     try:
-        req = urllib.request.Request(
-            _gh_api(path) + f"?ref={_GH_BRANCH}",
-            headers=_gh_headers()
-        )
-        with urllib.request.urlopen(req) as resp:
-            data = json.loads(resp.read())
-            content = base64.b64decode(data["content"]).decode("utf-8")
-            return content, data.get("sha")
-    except urllib.error.HTTPError as e:
-        _err_body = ""
-        try:
-            _err_body = e.read().decode()[:200]
-        except Exception:
-            pass
-        print(f"[GH] HTTP {e.code} reading {path}: {_err_body}")
-        # Surface the failure for diagnostics — last error wins per session
-        try:
-            import streamlit as _st_diag
-            _st_diag.session_state["_gh_last_error"] = (
-                f"HTTP {e.code} reading '{path}' "
-                f"(repo={_GH_REPO}, branch={_GH_BRANCH}, token_set={'yes' if _GH_TOKEN else 'NO'}): {_err_body}"
-            )
-        except Exception:
-            pass
-        return None, None
-    except Exception as e:
-        print(f"[GH] Error reading {path}: {e}")
-        try:
-            import streamlit as _st_diag
-            _st_diag.session_state["_gh_last_error"] = (
-                f"Error reading '{path}' "
-                f"(repo={_GH_REPO}, branch={_GH_BRANCH}, token_set={'yes' if _GH_TOKEN else 'NO'}): {e}"
-            )
-        except Exception:
-            pass
+        req = _ur.Request(
+            f"https://api.github.com/repos/{_GH_REPO}/contents/{path}?ref={_GH_BRANCH}",
+            headers=_gh_headers())
+        with _ur.urlopen(req) as r:
+            d = json.loads(r.read())
+            return _b64.b64decode(d["content"]).decode("utf-8"), d["sha"]
+    except Exception as ex:
+        print(f"[GH] read {path}: {ex}")
         return None, None
 
-def gh_write_file(path, content_str, commit_msg=None):
-    """Write/create/overwrite a file on GitHub. Returns True on success."""
+def gh_write_file(path, text, msg=None):
+    """Write text to GitHub file. Returns True on success."""
     if not _GH_TOKEN:
+        print("[GH] No token — skipping write")
         return False
     try:
-        existing_sha = gh_get_sha(path)
-        encoded = base64.b64encode(content_str.encode("utf-8")).decode()
+        # Get existing SHA
+        sha = None
+        try:
+            req = _ur.Request(
+                f"https://api.github.com/repos/{_GH_REPO}/contents/{path}?ref={_GH_BRANCH}",
+                headers=_gh_headers())
+            with _ur.urlopen(req) as r:
+                sha = json.loads(r.read()).get("sha")
+        except Exception:
+            pass
+
         payload = {
-            "message": commit_msg or f"Auto-save: {path}",
-            "content": encoded,
+            "message": msg or f"auto-save: {path}",
+            "content": _b64.b64encode(text.encode()).decode(),
             "branch":  _GH_BRANCH,
         }
-        if existing_sha:
-            payload["sha"] = existing_sha
-        data = json.dumps(payload).encode()
-        req = urllib.request.Request(
-            _gh_api(path), data=data, method="PUT", headers=_gh_headers()
-        )
-        with urllib.request.urlopen(req) as resp:
-            result = json.loads(resp.read())
-            return "commit" in result
-    except urllib.error.HTTPError as e:
-        print(f"[GH] HTTP {e.code} writing {path}: {e.read().decode()[:200]}")
+        if sha:
+            payload["sha"] = sha
+
+        req2 = _ur.Request(
+            f"https://api.github.com/repos/{_GH_REPO}/contents/{path}",
+            data=json.dumps(payload).encode(),
+            method="PUT",
+            headers=_gh_headers())
+        with _ur.urlopen(req2) as r:
+            ok = "commit" in json.loads(r.read())
+            print(f"[GH] write {path}: {'OK' if ok else 'FAIL'}")
+            return ok
+    except _ue.HTTPError as ex:
+        print(f"[GH] HTTP {ex.code} writing {path}: {ex.read().decode()[:300]}")
         return False
-    except Exception as e:
-        print(f"[GH] Error writing {path}: {e}")
+    except Exception as ex:
+        print(f"[GH] write {path}: {ex}")
         return False
 
+def gh_read_json(path, default=None):
+    """Read JSON file from GitHub → dict/list, or default."""
+    text, _ = gh_read_file(path)
+    if text:
+        try: return json.loads(text)
+        except: pass
+    return default if default is not None else {}
+
+def gh_write_json(path, obj, msg=None):
+    return gh_write_file(path, json.dumps(obj, indent=2), msg)
+
+def gh_read_csv(path):
+    """Read CSV from GitHub → DataFrame, or empty DataFrame."""
+    text, _ = gh_read_file(path)
+    if text:
+        try: return pd.read_csv(io.StringIO(text))
+        except: pass
+    return pd.DataFrame()
+
+def gh_write_csv(df, path, msg=None):
+    return gh_write_file(path, df.to_csv(index=False), msg)
+
+# ── Legacy stubs (called in old code — now just delegate to GitHub) ──
 def _gh_sync_to_local(gh_path, local_path):
-    """Pull a file from GitHub → write to local disk. Returns True if pulled."""
-    content, _ = gh_read_file(gh_path)
-    if content:
+    """Write GitHub file to local disk (best-effort, not relied upon)."""
+    text, _ = gh_read_file(gh_path)
+    if text:
         try:
             with open(local_path, "w", encoding="utf-8") as f:
-                f.write(content)
+                f.write(text)
             return True
-        except Exception:
-            pass
+        except: pass
     return False
 
 def _local_sync_to_gh(local_path, gh_path, commit_msg=None):
-    """Read local file → push to GitHub. Returns True on success."""
-    if not os.path.exists(local_path):
-        return False
+    """Read local file and push to GitHub."""
     try:
         with open(local_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        return gh_write_file(gh_path, content, commit_msg)
-    except Exception as e:
-        print(f"[GH] Error syncing {local_path}: {e}")
+            text = f.read()
+        return gh_write_file(gh_path, text, commit_msg)
+    except Exception as ex:
+        print(f"[GH] _local_sync_to_gh {local_path}: {ex}")
         return False
 
-def gh_save_csv(df, path, commit_msg=None):
-    """Save a DataFrame as CSV directly to GitHub."""
-    return gh_write_file(path, df.to_csv(index=False), commit_msg)
-
-def gh_load_csv(path):
-    """Load a CSV from GitHub into a DataFrame. Returns None if not found."""
-    content, _ = gh_read_file(path)
-    if content:
-        try:
-            return pd.read_csv(io.StringIO(content))
-        except Exception:
-            return None
-    return None
-
-def gh_sync_all_data_files():
-    """Pull ALL data files (clients + all portfolio/trades CSVs) from GitHub to local disk."""
-    import glob
-    # Always sync clients
-    _gh_sync_to_local("clients.json", "clients.json")
-    # Sync any portfolio/trades CSVs already in the repo
-    try:
-        req = urllib.request.Request(
-            f"https://api.github.com/repos/{_GH_REPO}/contents/?ref={_GH_BRANCH}",
-            headers=_gh_headers()
-        )
-        with urllib.request.urlopen(req) as resp:
-            files = json.loads(resp.read())
-        for f in files:
-            name = f.get("name", "")
-            if (name.startswith("portfolio_") or name.startswith("trades_")) and name.endswith(".csv"):
-                _gh_sync_to_local(name, name)
-    except Exception as e:
-        print(f"[GH] Could not list repo contents: {e}")
-
-# ── On every cold boot: pull ALL data files from GitHub to local disk ──
-# @st.cache_resource runs exactly once per Streamlit server process (i.e. once per cold boot)
-# Run once per browser session (after st.secrets is fully loaded).
-# @st.cache_resource was removed — it ran at module-load time before
-# st.secrets initialised, so _GH_TOKEN was always "" on first cold boot.
-if not st.session_state.get("_startup_sync_done"):
-    gh_sync_all_data_files()
-    st.session_state["_startup_sync_done"] = True
+def _df_to_gh(df, gh_path, commit_msg=None):
+    return gh_write_csv(df, gh_path, commit_msg)
 
 # =========================================================
 # CLIENT MANAGEMENT — Client Code login, no visible client list
@@ -1160,8 +1102,12 @@ DEV_CODE     = "DEVNORTHEAST"    # ← change to your private dev code
 DEV_PASSWORD = "northeast@dev"   # ← change to your private dev password
 
 def load_clients():
+    """Load clients dict from GitHub directly (no local disk)."""
     import json
-    if os.path.exists(CLIENTS_FILE):
+    _gh_data = gh_read_json(CLIENTS_FILE, default=None)
+    if _gh_data is not None:
+        data = _gh_data
+    elif os.path.exists(CLIENTS_FILE):
         with open(CLIENTS_FILE) as f:
             data = json.load(f)
         # Migrate old format (name-keyed) → new format (code-keyed)
@@ -1194,11 +1140,8 @@ def load_clients():
     return default
 
 def save_clients(d):
-    import json
-    with open(CLIENTS_FILE, "w") as f:
-        json.dump(d, f, indent=2)
-    # ── Also persist to GitHub so data survives Streamlit reboots ──
-    _local_sync_to_gh(CLIENTS_FILE, CLIENTS_FILE, "Auto-save: clients.json")
+    """Save clients dict → GitHub directly (no local disk)."""
+    gh_write_json(CLIENTS_FILE, d, "auto-save: clients.json")
 
 def hash_password(pw: str) -> str:
     if not pw:
@@ -1208,20 +1151,14 @@ def hash_password(pw: str) -> str:
 def client_portfolio_file(code):
     safe = re.sub(r"[^\w\-]", "_", code.strip().upper())
     path = f"portfolio_{safe}.csv"
-    # Pull from GitHub ONLY if local file absent (Streamlit Cloud disk is ephemeral).
-    # Do NOT pull unconditionally — that creates a race condition where the page
-    # re-render fetches the OLD GH version and overwrites the freshly saved import
-    # before the GitHub PUT commit has even propagated.
-    if not os.path.exists(path):
-        _gh_sync_to_local(path, path)
+    # Always pull fresh from GitHub on every call
+    _gh_sync_to_local(path, path)
     return path
-
 def client_trades_file(code):
     safe = re.sub(r"[^\w\-]", "_", code.strip().upper())
     path = f"trades_{safe}.csv"
-    # Pull from GH only if not already on disk — avoids race condition after import.
-    if not os.path.exists(path):
-        _gh_sync_to_local(path, path)
+    # Always pull fresh from GitHub
+    _gh_sync_to_local(path, path)
     return path
 
 # ── Session state bootstrap ───────────────────────────────────────
