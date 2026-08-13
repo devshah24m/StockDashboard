@@ -15783,7 +15783,8 @@ if _nav_tab == "Results Monitor":
         _IST2 = timezone(timedelta(hours=5, minutes=30))
         _td   = datetime.now(_IST2).strftime("%d-%m-%Y")
         _hd   = {"User-Agent":"Mozilla/5.0","Accept":"application/json","Referer":"https://www.nseindia.com/"}
-        _out  = []
+        _sched = {}
+        _pub   = {}
         try:
             _ss1 = requests.Session()
             _ss1.get("https://www.nseindia.com", headers=_hd, timeout=8)
@@ -15793,7 +15794,8 @@ if _nav_tab == "Results Monitor":
                 for _x in _it1:
                     _p = str(_x.get("purpose","")).strip()
                     if any(_k in _p.lower() for _k in ["financial result","quarterly result","annual result","half yearly","result"]):
-                        _out.append({"symbol":str(_x.get("symbol","")).strip(),"purpose":_p,"time":"","source":"NSE Calendar"})
+                        _sy = str(_x.get("symbol","")).strip().upper()
+                        if _sy: _sched[_sy] = {"symbol":str(_x.get("symbol","")).strip(),"purpose":_p,"time":"","source":"NSE Calendar","link":"","status":"scheduled"}
         except Exception: pass
         try:
             _ss2 = requests.Session()
@@ -15806,14 +15808,13 @@ if _nav_tab == "Results Monitor":
                     _per2 = str(_x2.get("period","")).strip()
                     _tm2  = str(_x2.get("submissionTime", _x2.get("filingTime",""))).strip()
                     _lnk2 = str(_x2.get("attchmntFile", _x2.get("attachment",""))).strip()
-                    if _sym2:
-                        _out.append({"symbol":_sym2,"purpose":f"Financial Results{chr(32)+chr(8212)+chr(32)+_per2 if _per2 else chr(32)}","time":_tm2,"source":"NSE Filings","link":_lnk2})
+                    if _sym2 and _lnk2:  # only count as "published" if there's an actual filed document
+                        _sy2 = _sym2.upper()
+                        _pub[_sy2] = {"symbol":_sym2,"purpose":f"Financial Results{chr(32)+chr(8212)+chr(32)+_per2 if _per2 else chr(32)}","time":_tm2,"source":"NSE Filings","link":_lnk2,"status":"published"}
         except Exception: pass
-        _seen3,_dd=[],[]
-        for _i in _out:
-            _i.setdefault("link","")
-            if _i["symbol"].upper() not in _seen3:
-                _seen3.append(_i["symbol"].upper()); _dd.append(_i)
+        # Published (with a real, filed document) always takes priority over a mere calendar entry
+        for _sy3 in list(_pub.keys()): _sched.pop(_sy3, None)
+        _dd = list(_pub.values()) + list(_sched.values())
         return _dd, datetime.now(_IST2).strftime("%I:%M:%S %p IST")
 
     _rcc1,_rcc2,_rcc3 = st.columns([3,1,1])
@@ -15837,8 +15838,9 @@ if _nav_tab == "Results Monitor":
 
     _only_pf_rm = st.toggle("🔔 Alert only for my portfolio stocks", value=True, key="rm_pf_only")
 
+    _pub_data  = [r for r in _rm_data if r.get("status") == "published"]
     _prev_seen = set(st.session_state.get("rm_seen_syms",[]))
-    _new_r_all = [r for r in _rm_data if r["symbol"].upper() not in _prev_seen]
+    _new_r_all = [r for r in _pub_data if r["symbol"].upper() not in _prev_seen]
     _new_r     = [r for r in _new_r_all if (r["symbol"].upper() in _pf_syms)] if _only_pf_rm else _new_r_all
     if _new_r:
         _al = "\U0001f514 *NSE Results Published*\n\n" + "\n".join(
@@ -15849,17 +15851,21 @@ if _nav_tab == "Results Monitor":
         if _tg_tok_v and _tg_cid_v: _rm_tg_send(_tg_tok_v, _tg_cid_v, _al)
         if _em_to_v and _em_from_v and _em_pw_v: _rm_em_send(_em_from_v,_em_pw_v,_em_to_v,f"NSE Results — {len(_new_r)} new",_al.replace("*",""))
         st.success(f"🔔 {len(_new_r)} new result(s) — alert sent!")
-    st.session_state["rm_seen_syms"] = list(_prev_seen | {r["symbol"].upper() for r in _rm_data})
+    # Only "published" (actually filed, with a document) symbols mark as seen —
+    # a merely "scheduled" symbol must NOT block its later real alert once it actually files.
+    st.session_state["rm_seen_syms"] = list(_prev_seen | {r["symbol"].upper() for r in _pub_data})
 
     if not _rm_data:
         st.info("📭 No results yet for today. NSE publishes between 4 PM – 11 PM IST.")
     else:
         _dcc1, _dcc2 = st.columns([3,1])
-        with _dcc1: st.markdown(f"### 📋 {len(_rm_data)} Result(s) Today")
+        with _dcc1: st.markdown(f"### 📋 {len(_pub_data)} Published \u00b7 {len(_rm_data)-len(_pub_data)} Scheduled Today")
         with _dcc2: _show_pf_only = st.toggle("📁 My portfolio only", value=False, key="rm_show_pf_only")
 
         _pf_count = sum(1 for r in _rm_data if r["symbol"].upper() in _pf_syms)
         _display_data = [r for r in _rm_data if r["symbol"].upper() in _pf_syms] if _show_pf_only else _rm_data
+        # Published first, then scheduled — within each group, most recent submission time first
+        _display_data = sorted(_display_data, key=lambda r: (r.get("status") != "published", r.get("time","")), reverse=False)
 
         if _show_pf_only:
             st.caption(f"Showing {_pf_count} of {len(_rm_data)} result(s) — filtered to your portfolio")
@@ -15870,23 +15876,28 @@ if _nav_tab == "Results Monitor":
         for _rr in _display_data:
             _su = _rr["symbol"].upper()
             _ip = _su in _pf_syms
-            _bc2 = "#f85454" if _ip else "#2a2a5a"
+            _is_pub = _rr.get("status") == "published"
+            _bc2 = "#f85454" if _ip else ("#22d67b" if _is_pub else "#2a2a5a")
             _bg2 = "<span style='background:#f85454;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;margin-left:8px;'>IN PORTFOLIO</span>" if _ip else ""
+            _st2 = "<span style='background:#22d67b;color:#04220f;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;margin-left:8px;'>✅ PUBLISHED</span>" if _is_pub else "<span style='background:#3a3a5a;color:#c8c8e0;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;margin-left:8px;'>🕓 SCHEDULED</span>"
             _tm2 = _rr["time"] if _rr["time"] else "—"
             _lk2 = f"<a href='{_rr['link']}' target='_blank' style='color:#4da3ff;font-size:11px;'>📄 View Result</a>" if _rr.get("link") else ""
             st.markdown(
                 f"<div style='background:#13132a;border:1.5px solid {_bc2};border-radius:10px;padding:14px 18px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;'>"
-                f"<div><span style='font-size:16px;font-weight:800;color:#e0e3ff;'>{_rr['symbol']}</span>{_bg2}"
+                f"<div><span style='font-size:16px;font-weight:800;color:#e0e3ff;'>{_rr['symbol']}</span>{_st2}{_bg2}"
                 f"<div style='font-size:12px;color:#8888aa;margin-top:4px;'>{_rr['purpose']}</div>{_lk2}</div>"
                 f"<div style='text-align:right;'><div style='font-size:12px;color:#22d67b;font-weight:600;'>{_rr['source']}</div>"
                 f"<div style='font-size:11px;color:#5a5f88;'>{_tm2}</div></div></div>",
                 unsafe_allow_html=True)
         st.markdown("---")
-        if st.button(f"📤 Send {'Portfolio' if _show_pf_only else 'All'} as Alert", key="rm_manual", type="primary"):
+        _send_data = [r for r in _display_data if r.get("status") == "published"]
+        if not _send_data:
+            st.caption("No published results in view yet to send — scheduled-only entries aren't sent as alerts.")
+        if st.button(f"📤 Send {'Portfolio' if _show_pf_only else 'All'} Published as Alert", key="rm_manual", type="primary", disabled=not _send_data):
             _ma = "\U0001f4cb *NSE Results \u2014 " + _ist_now_rm.strftime("%d %b %Y") + "*\n\n" + "\n".join(
                 f"\u2022 *{r['symbol']}* \u2014 {r['purpose']}" + (f" @ {r['time']}" if r["time"] else "")
                 + (f"\n  \U0001f4c4 [View Result]({r['link']})" if r.get("link") else "")
-                for r in _display_data)
+                for r in _send_data)
             _sent2 = False
             if _tg_tok_v and _tg_cid_v:
                 if _rm_tg_send(_tg_tok_v, _tg_cid_v, _ma): st.success("✅ Sent to Telegram!"); _sent2=True
