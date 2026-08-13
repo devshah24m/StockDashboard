@@ -15879,18 +15879,23 @@ if _nav_tab == "Results Monitor":
             _to3   = datetime.now(_IST3).strftime("%d-%m-%Y")
             for _sym3 in _syms_tuple:
                 _hits3 = []
+                _statuses3 = []
                 for _per3 in ("Quarterly", "Half-Yearly", "Annual", "Others"):
                     try:
                         _r3 = _ss3.get(
                             f"https://www.nseindia.com/api/corporates-financial-results?index=equities&period={_per3}&symbol={_sym3}&from_date={_from3}&to_date={_to3}",
                             headers=_hd3, timeout=10)
+                        _statuses3.append(f"{_per3}:{_r3.status_code}")
                         if _r3.status_code == 200:
                             _j3 = _r3.json()
                             _c3 = _j3 if isinstance(_j3, list) else _j3.get("data", [])
                             _hits3.extend(_c3)
-                    except Exception: pass
+                    except Exception as _epersym: _statuses3.append(f"{_per3}:err({_epersym})")
+                # Always record diagnostics for this symbol, even with zero hits,
+                # so silent NSE blocking/rate-limiting is visible instead of invisible.
+                _dbg3[_sym3] = {"http_statuses": _statuses3, "hits_found": len(_hits3)}
                 if _hits3:
-                    _dbg3[_sym3] = _hits3[:2]
+                    _dbg3[_sym3]["sample"] = _hits3[0]
                     _hits3.sort(key=lambda r: str(r.get("broadCastDate","")), reverse=True)
                     _top3 = _hits3[0]
                     _dt3  = str(_top3.get("broadCastDate","")).strip()
@@ -15926,12 +15931,16 @@ if _nav_tab == "Results Monitor":
     try: _pf_syms = {str(t).upper().replace(".NS","").replace(".BO","") for t in df["Ticker"].unique()} if not df.empty else set()
     except Exception: _pf_syms = set()
 
-    # Portfolio symbols the bulk feed says are NOT yet published — double-check these
-    # directly against NSE per-symbol, since the bulk list can lag behind reality.
+    # Portfolio symbols relevant to TODAY (on the calendar) that the bulk feed says
+    # are NOT yet published — double-check only these directly against NSE per-symbol.
+    # (Checking the whole portfolio here was too many rapid requests and got silently
+    # rate-limited by NSE, which is why the debug panel came back empty last time.)
+    _today_relevant_syms = {r["symbol"].upper() for r in _rm_data}
     _bulk_pub_syms = {r["symbol"].upper() for r in _rm_data if r.get("status") == "published"}
-    _pf_to_check = tuple(sorted(_pf_syms - _bulk_pub_syms))
+    _pf_to_check = tuple(sorted((_pf_syms & _today_relevant_syms) - _bulk_pub_syms))
     _direct_found, _direct_dbg = ({}, {})
     if _pf_to_check:
+        import time as _time_dc
         with st.spinner(f"Double-checking {len(_pf_to_check)} portfolio symbol(s) directly with NSE..."):
             _direct_found, _direct_dbg = _rm_direct_check(_pf_to_check)
     _today_dmy_main = _ist_now_rm.strftime("%d-%b-%Y")
@@ -15942,12 +15951,13 @@ if _nav_tab == "Results Monitor":
         _rm_data = [r for r in _rm_data if r["symbol"].upper() != _dsym]  # drop any stale "scheduled" entry
         _rm_data.append({"symbol":_dsym, "purpose":_drec["purpose"], "time":_drec["time"],
                           "source":"NSE Direct Check", "link":_drec["link"], "status":"published"})
-    if _direct_dbg:
-        with st.expander("🔎 Direct per-symbol NSE check (portfolio only)", expanded=False):
+    if _pf_to_check:
+        with st.expander(f"🔎 Direct per-symbol NSE check ({len(_pf_to_check)} portfolio symbol(s) on today's calendar)", expanded=False):
             st.json(_direct_dbg)
-            st.caption("Shows raw NSE hits found by querying each portfolio symbol individually, "
-                       "even if it didn't appear in the bulk list above. If a symbol you expect isn't "
-                       "listed here at all, NSE genuinely has no filing on record for it yet.")
+            st.caption("Shows raw NSE hits (and HTTP status per period) for each portfolio symbol checked "
+                       "individually. All-non-200 statuses across every symbol usually means NSE rate-limited "
+                       "this check — try Refresh again in a minute. hits_found:0 with 200 statuses means NSE "
+                       "genuinely has no filing on record for that symbol yet.")
 
     _only_pf_rm = st.toggle("🔔 Alert only for my portfolio stocks", value=True, key="rm_pf_only")
 
