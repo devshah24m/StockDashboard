@@ -15805,11 +15805,13 @@ if _nav_tab == "Results Monitor":
                     _sym2 = str(_x2.get("symbol", _x2.get("companyName",""))).strip()
                     _per2 = str(_x2.get("period","")).strip()
                     _tm2  = str(_x2.get("submissionTime", _x2.get("filingTime",""))).strip()
+                    _lnk2 = str(_x2.get("attchmntFile", _x2.get("attachment",""))).strip()
                     if _sym2:
-                        _out.append({"symbol":_sym2,"purpose":f"Financial Results{chr(32)+chr(8212)+chr(32)+_per2 if _per2 else chr(32)}","time":_tm2,"source":"NSE Filings"})
+                        _out.append({"symbol":_sym2,"purpose":f"Financial Results{chr(32)+chr(8212)+chr(32)+_per2 if _per2 else chr(32)}","time":_tm2,"source":"NSE Filings","link":_lnk2})
         except Exception: pass
-        _seen3,_dd=[],[] 
+        _seen3,_dd=[],[]
         for _i in _out:
+            _i.setdefault("link","")
             if _i["symbol"].upper() not in _seen3:
                 _seen3.append(_i["symbol"].upper()); _dd.append(_i)
         return _dd, datetime.now(_IST2).strftime("%I:%M:%S %p IST")
@@ -15830,11 +15832,18 @@ if _nav_tab == "Results Monitor":
     _em_from_v = st.session_state.get("rm_em_from_sv","")
     _em_pw_v   = st.session_state.get("rm_em_pw_sv","")
 
+    try: _pf_syms = {str(t).upper().replace(".NS","").replace(".BO","") for t in portfolio_tickers}
+    except Exception: _pf_syms = set()
+
+    _only_pf_rm = st.toggle("🔔 Alert only for my portfolio stocks", value=True, key="rm_pf_only")
+
     _prev_seen = set(st.session_state.get("rm_seen_syms",[]))
-    _new_r     = [r for r in _rm_data if r["symbol"].upper() not in _prev_seen]
+    _new_r_all = [r for r in _rm_data if r["symbol"].upper() not in _prev_seen]
+    _new_r     = [r for r in _new_r_all if (r["symbol"].upper() in _pf_syms)] if _only_pf_rm else _new_r_all
     if _new_r:
         _al = "\U0001f514 *NSE Results Published*\n\n" + "\n".join(
             f"\u2022 *{r['symbol']}* \u2014 {r['purpose']}" + (f" @ {r['time']}" if r["time"] else "")
+            + (f"\n  \U0001f4c4 [View Result]({r['link']})" if r.get("link") else "")
             for r in _new_r
         ) + f"\n\n\U0001f4c5 {_ist_now_rm.strftime('%d %b %Y, %I:%M %p IST')}"
         if _tg_tok_v and _tg_cid_v: _rm_tg_send(_tg_tok_v, _tg_cid_v, _al)
@@ -15845,8 +15854,6 @@ if _nav_tab == "Results Monitor":
     if not _rm_data:
         st.info("📭 No results yet for today. NSE publishes between 4 PM – 11 PM IST.")
     else:
-        try: _pf_syms = {str(t).upper().replace(".NS","").replace(".BO","") for t in portfolio_tickers}
-        except Exception: _pf_syms = set()
         st.markdown(f"### 📋 {len(_rm_data)} Result(s) Today")
         for _rr in _rm_data:
             _su = _rr["symbol"].upper()
@@ -15854,10 +15861,11 @@ if _nav_tab == "Results Monitor":
             _bc2 = "#f85454" if _ip else "#2a2a5a"
             _bg2 = "<span style='background:#f85454;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;margin-left:8px;'>IN PORTFOLIO</span>" if _ip else ""
             _tm2 = _rr["time"] if _rr["time"] else "—"
+            _lk2 = f"<a href='{_rr['link']}' target='_blank' style='color:#4da3ff;font-size:11px;'>📄 View Result</a>" if _rr.get("link") else ""
             st.markdown(
                 f"<div style='background:#13132a;border:1.5px solid {_bc2};border-radius:10px;padding:14px 18px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;'>"
                 f"<div><span style='font-size:16px;font-weight:800;color:#e0e3ff;'>{_rr['symbol']}</span>{_bg2}"
-                f"<div style='font-size:12px;color:#8888aa;margin-top:4px;'>{_rr['purpose']}</div></div>"
+                f"<div style='font-size:12px;color:#8888aa;margin-top:4px;'>{_rr['purpose']}</div>{_lk2}</div>"
                 f"<div style='text-align:right;'><div style='font-size:12px;color:#22d67b;font-weight:600;'>{_rr['source']}</div>"
                 f"<div style='font-size:11px;color:#5a5f88;'>{_tm2}</div></div></div>",
                 unsafe_allow_html=True)
@@ -15865,6 +15873,7 @@ if _nav_tab == "Results Monitor":
         if st.button("📤 Send All as Alert", key="rm_manual", type="primary"):
             _ma = "\U0001f4cb *NSE Results \u2014 " + _ist_now_rm.strftime("%d %b %Y") + "*\n\n" + "\n".join(
                 f"\u2022 *{r['symbol']}* \u2014 {r['purpose']}" + (f" @ {r['time']}" if r["time"] else "")
+                + (f"\n  \U0001f4c4 [View Result]({r['link']})" if r.get("link") else "")
                 for r in _rm_data)
             _sent2 = False
             if _tg_tok_v and _tg_cid_v:
