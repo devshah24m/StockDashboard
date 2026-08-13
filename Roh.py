@@ -15854,8 +15854,20 @@ if _nav_tab == "Results Monitor":
     if not _rm_data:
         st.info("📭 No results yet for today. NSE publishes between 4 PM – 11 PM IST.")
     else:
-        st.markdown(f"### 📋 {len(_rm_data)} Result(s) Today")
-        for _rr in _rm_data:
+        _dcc1, _dcc2 = st.columns([3,1])
+        with _dcc1: st.markdown(f"### 📋 {len(_rm_data)} Result(s) Today")
+        with _dcc2: _show_pf_only = st.toggle("📁 My portfolio only", value=False, key="rm_show_pf_only")
+
+        _pf_count = sum(1 for r in _rm_data if r["symbol"].upper() in _pf_syms)
+        _display_data = [r for r in _rm_data if r["symbol"].upper() in _pf_syms] if _show_pf_only else _rm_data
+
+        if _show_pf_only:
+            st.caption(f"Showing {_pf_count} of {len(_rm_data)} result(s) — filtered to your portfolio")
+
+        if _show_pf_only and not _display_data:
+            st.info("📭 None of today's results are in your portfolio yet.")
+
+        for _rr in _display_data:
             _su = _rr["symbol"].upper()
             _ip = _su in _pf_syms
             _bc2 = "#f85454" if _ip else "#2a2a5a"
@@ -15870,11 +15882,11 @@ if _nav_tab == "Results Monitor":
                 f"<div style='font-size:11px;color:#5a5f88;'>{_tm2}</div></div></div>",
                 unsafe_allow_html=True)
         st.markdown("---")
-        if st.button("📤 Send All as Alert", key="rm_manual", type="primary"):
+        if st.button(f"📤 Send {'Portfolio' if _show_pf_only else 'All'} as Alert", key="rm_manual", type="primary"):
             _ma = "\U0001f4cb *NSE Results \u2014 " + _ist_now_rm.strftime("%d %b %Y") + "*\n\n" + "\n".join(
                 f"\u2022 *{r['symbol']}* \u2014 {r['purpose']}" + (f" @ {r['time']}" if r["time"] else "")
                 + (f"\n  \U0001f4c4 [View Result]({r['link']})" if r.get("link") else "")
-                for r in _rm_data)
+                for r in _display_data)
             _sent2 = False
             if _tg_tok_v and _tg_cid_v:
                 if _rm_tg_send(_tg_tok_v, _tg_cid_v, _ma): st.success("✅ Sent to Telegram!"); _sent2=True
