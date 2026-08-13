@@ -15904,7 +15904,7 @@ if _nav_tab == "Results Monitor":
         except Exception as _e3: _dbg3["error"] = str(_e3)
         return _found, _dbg3
 
-
+    _rcc1,_rcc2,_rcc3 = st.columns([3,1,1])
     with _rcc1: st.markdown(f"**📅 Today: {_ist_now_rm.strftime('%d %b %Y')}**")
     with _rcc2: _auto_rm = st.toggle("Auto Refresh", value=False, key="rm_auto")
     with _rcc3:
