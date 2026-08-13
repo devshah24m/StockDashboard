@@ -15832,7 +15832,7 @@ if _nav_tab == "Results Monitor":
     _em_from_v = st.session_state.get("rm_em_from_sv","")
     _em_pw_v   = st.session_state.get("rm_em_pw_sv","")
 
-    try: _pf_syms = {str(t).upper().replace(".NS","").replace(".BO","") for t in portfolio_tickers}
+    try: _pf_syms = {str(t).upper().replace(".NS","").replace(".BO","") for t in df["Ticker"].unique()} if not df.empty else set()
     except Exception: _pf_syms = set()
 
     _only_pf_rm = st.toggle("🔔 Alert only for my portfolio stocks", value=True, key="rm_pf_only")
