@@ -15718,8 +15718,8 @@ if _nav_tab == "Results Monitor":
                     try:
                         _test_txt = "\U0001f514 Results Monitor Test\n\nYour NSE alert is working!"
                         _tb = json.dumps({"chat_id":_tg_cid,"text":_test_txt,"parse_mode":"Markdown"}).encode()
-                        _tr = urllib.request.Request(f"https://api.telegram.org/bot{_tg_tok}/sendMessage", data=_tb, headers={"Content-Type":"application/json"}, method="POST")
-                        with urllib.request.urlopen(_tr, timeout=10) as _rr:
+                        _tr = _ur.Request(f"https://api.telegram.org/bot{_tg_tok}/sendMessage", data=_tb, headers={"Content-Type":"application/json"}, method="POST")
+                        with _ur.urlopen(_tr, timeout=10) as _rr:
                             _tres = json.loads(_rr.read())
                         if _tres.get("ok"):
                             st.success("✅ Sent!")
@@ -15765,8 +15765,8 @@ if _nav_tab == "Results Monitor":
     def _rm_tg_send(tok, cid, txt):
         try:
             _b = json.dumps({"chat_id":cid,"text":txt,"parse_mode":"Markdown"}).encode()
-            _q = urllib.request.Request(f"https://api.telegram.org/bot{tok}/sendMessage", data=_b, headers={"Content-Type":"application/json"}, method="POST")
-            with urllib.request.urlopen(_q, timeout=8) as _r: return json.loads(_r.read()).get("ok",False)
+            _q = _ur.Request(f"https://api.telegram.org/bot{tok}/sendMessage", data=_b, headers={"Content-Type":"application/json"}, method="POST")
+            with _ur.urlopen(_q, timeout=8) as _r: return json.loads(_r.read()).get("ok",False)
         except Exception: return False
 
     def _rm_em_send(frm, pw, to, subj, body):
