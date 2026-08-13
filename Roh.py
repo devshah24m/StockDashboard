@@ -976,7 +976,7 @@ except Exception:
 # GITHUB PERSISTENCE LAYER  — 100% in-memory, no local disk
 # =========================================================
 
-import base64 as _b64, urllib.request as _ur, urllib.error as _ue
+import json, base64 as _b64, urllib.request as _ur, urllib.error as _ue
 
 try:    _GH_TOKEN  = st.secrets["GITHUB_TOKEN"]
 except: _GH_TOKEN  = ""
