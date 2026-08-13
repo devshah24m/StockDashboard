@@ -6727,10 +6727,19 @@ def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
 
     st.markdown("---")
 
+    if not _GH_TOKEN:
+        st.error(
+            "⚠️ **GITHUB_TOKEN is not configured in st.secrets.** "
+            "Imports will run and save locally, but nothing will be pushed to GitHub — "
+            "all imported clients/portfolios will be **lost on the next reboot**. "
+            "Add GITHUB_TOKEN (and GITHUB_REPO / GITHUB_BRANCH if needed) under Settings → Secrets before importing."
+        )
+
     def _do_import(overwrite_existing: bool):
         imported_clients  = 0
         skipped_clients   = 0
         imported_trades   = 0
+        gh_failures       = []   # collects every GitHub write that actually failed
 
         for cid, grp in client_groups:
             cname = grp["Client Name"].iloc[0]
@@ -6778,17 +6787,38 @@ def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
                     subset=["Ticker","Asset_Type","Buy_Date","Buy_Price","Shares"], keep="last"
                 )
                 merged.to_csv(pf_path, index=False)
-                _local_sync_to_gh(pf_path, pf_path, f"Import: portfolio for {cid}")
+                if not _local_sync_to_gh(pf_path, pf_path, f"Import: portfolio for {cid}"):
+                    gh_failures.append(f"Portfolio for {cid}")
             else:
                 trade_df.to_csv(pf_path, index=False)
-                _local_sync_to_gh(pf_path, pf_path, f"Import: portfolio for {cid}")
+                if not _local_sync_to_gh(pf_path, pf_path, f"Import: portfolio for {cid}"):
+                    gh_failures.append(f"Portfolio for {cid}")
 
             imported_trades += len(trade_df)
 
         # ── Save clients.json ──
-        save_clients_fn(clients_dict_ref)
+        if not save_clients_fn(clients_dict_ref):
+            gh_failures.append("clients.json (all client accounts)")
 
-        return imported_clients, skipped_clients, imported_trades
+        return imported_clients, skipped_clients, imported_trades, gh_failures
+
+    def _report_result(ic, sc, it, gh_failures, overwrote):
+        verb = "imported/updated" if overwrote else "created"
+        msg = f"{ic} client(s) {verb}, {sc} skipped, {it} trade(s) saved."
+        if gh_failures:
+            st.warning(f"⚠️ {msg}")
+            st.error(
+                "❌ **GitHub save FAILED for:**\n\n" +
+                "\n".join(f"- {f}" for f in gh_failures) +
+                "\n\nThis data exists only in this session's local storage right now and "
+                "**will be lost on the next app restart**. Check the app logs for a `[GH]` line "
+                "explaining why (bad/expired GITHUB_TOKEN, wrong GITHUB_REPO/GITHUB_BRANCH, or "
+                "no write permission on the token), fix it, then re-run the import with "
+                "**Import & Overwrite All** to push everything again."
+            )
+        else:
+            st.success(f"✅ Done! {msg}")
+            st.info("💾 All data confirmed saved to GitHub — will persist after reboots.")
 
     ca1, ca2 = st.columns(2)
     with ca1:
@@ -6797,21 +6827,21 @@ def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
             use_container_width=True, type="primary", key="mi_combined_import_btn",
             disabled=(new_count == 0)
         ):
-            ic, sc, it = _do_import(overwrite_existing=False)
-            st.success(f"✅ Done! {ic} new client(s) created, {sc} skipped (already exist), {it} trade(s) saved.")
-            st.balloons()
-            st.info("💾 All data saved to GitHub — will persist after reboots.")
-            st.rerun()
+            ic, sc, it, gh_failures = _do_import(overwrite_existing=False)
+            _report_result(ic, sc, it, gh_failures, overwrote=False)
+            if not gh_failures:
+                st.balloons()
+                st.rerun()
 
     with ca2:
         if st.button(
             f"🔄 Import & Overwrite All ({len(summary_df)} clients)",
             use_container_width=True, type="secondary", key="mi_combined_overwrite_btn"
         ):
-            ic, sc, it = _do_import(overwrite_existing=True)
-            st.warning(f"⚠️ {ic} client(s) imported/updated, {it} trade(s) saved (existing data overwritten).")
-            st.info("💾 All data saved to GitHub — will persist after reboots.")
-            st.rerun()
+            ic, sc, it, gh_failures = _do_import(overwrite_existing=True)
+            _report_result(ic, sc, it, gh_failures, overwrote=True)
+            if not gh_failures:
+                st.rerun()
 
 
 
