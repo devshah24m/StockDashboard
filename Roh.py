@@ -15785,7 +15785,7 @@ if _nav_tab == "Results Monitor":
         _hd   = {"User-Agent":"Mozilla/5.0","Accept":"application/json","Referer":"https://www.nseindia.com/"}
         _sched = {}
         _pub   = {}
-        _raw_dbg = {"calendar_count": 0, "filings_raw_count": 0, "filings_today_count": 0, "error": "", "today_expected_format": datetime.now(_IST2).strftime("%d-%b-%Y")}
+        _raw_dbg = {"calendar_count": 0, "filings_raw_count": 0, "filings_today_count": 0, "error": "", "today_expected_format": datetime.now(_IST2).strftime("%d-%b-%Y"), "filings_query_range": ""}
         try:
             _ss1 = requests.Session()
             _ss1.get("https://www.nseindia.com", headers=_hd, timeout=8)
@@ -15807,9 +15807,14 @@ if _nav_tab == "Results Monitor":
             # NSE requires an explicit period; it does NOT return all periods by default.
             # Querying only "Quarterly" silently drops Annual / Half Yearly / Others filings.
             _it2 = []
+            _from_d = (datetime.now(_IST2) - timedelta(days=7)).strftime("%d-%m-%Y")
+            _to_d   = datetime.now(_IST2).strftime("%d-%m-%Y")
+            _raw_dbg["filings_query_range"] = f"{_from_d} to {_to_d}"
             for _per_q in ("Quarterly", "Half-Yearly", "Annual", "Others"):
                 try:
-                    _rsp2 = _ss2.get(f"https://www.nseindia.com/api/corporates-financial-results?index=equities&period={_per_q}", headers=_hd, timeout=10)
+                    _rsp2 = _ss2.get(
+                        f"https://www.nseindia.com/api/corporates-financial-results?index=equities&period={_per_q}&from_date={_from_d}&to_date={_to_d}",
+                        headers=_hd, timeout=10)
                     if _rsp2.status_code == 200:
                         _jj2 = _rsp2.json()
                         _chunk2 = _jj2 if isinstance(_jj2, list) else _jj2.get("data", [])
