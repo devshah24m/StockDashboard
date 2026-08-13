@@ -15812,21 +15812,21 @@ if _nav_tab == "Results Monitor":
                 if _it2: _raw_dbg["sample_record"] = _it2[0]
                 for _x2 in _it2:
                     _sym2 = str(_x2.get("symbol", _x2.get("companyName",""))).strip()
-                    # NSE has used different field names for the broadcast/filing date over time — check all known variants
-                    _dtraw = str(_x2.get("bm_broadcast_date", _x2.get("broadcastDate", _x2.get("re_broadcast_timestamp", _x2.get("filingDate", _x2.get("submissionTime","")))))).strip()
+                    # Confirmed real NSE field: "broadCastDate", format "30-Jul-2026 17:17:53"
+                    _dtraw = str(_x2.get("broadCastDate", _x2.get("bm_broadcast_date", _x2.get("filingDate", "")))).strip()
                     if not _dtraw: continue
-                    _dtonly = _dtraw.split(" ")[0].split("T")[0]
-                    # Broadcast date on NSE filings is usually DD-MMM-YYYY or YYYY-MM-DD — normalize both against today
-                    _is_today = (_dtonly == _td) or (_dtonly == datetime.now(_IST2).strftime("%Y-%m-%d")) or (datetime.now(_IST2).strftime("%d-%b-%Y").upper() in _dtraw.upper())
-                    if not _is_today: continue
+                    _dtonly = _dtraw.split(" ")[0]  # "30-Jul-2026"
+                    _dtime  = _dtraw.split(" ")[1] if " " in _dtraw else ""
+                    _today_dmy = datetime.now(_IST2).strftime("%d-%b-%Y")  # "13-Aug-2026" — matches NSE's format exactly
+                    if _dtonly != _today_dmy: continue
                     _raw_dbg["filings_today_count"] += 1
-                    _per2 = str(_x2.get("re_relating_to", _x2.get("relatingTo", _x2.get("period","")))).strip()
-                    _lnk2 = str(_x2.get("xbrl_attachment", _x2.get("xbrl", _x2.get("attchmntFile", _x2.get("attachment",""))))).strip()
+                    _per2 = str(_x2.get("relatingTo", _x2.get("period",""))).strip()
+                    _lnk2 = str(_x2.get("xbrl", _x2.get("xbrl_attachment", _x2.get("attchmntFile", _x2.get("attachment",""))))).strip()
                     if _lnk2 and _lnk2.startswith("/"): _lnk2 = "https://nsearchives.nseindia.com" + _lnk2
                     elif _lnk2 and not _lnk2.startswith("http"): _lnk2 = "https://nsearchives.nseindia.com/" + _lnk2.lstrip("/")
                     if _sym2:
                         _sy2 = _sym2.upper()
-                        _pub[_sy2] = {"symbol":_sym2,"purpose":f"Financial Results{chr(32)+chr(8212)+chr(32)+_per2 if _per2 else chr(32)}","time":_dtraw,"source":"NSE Filings","link":_lnk2,"status":"published"}
+                        _pub[_sy2] = {"symbol":_sym2,"purpose":f"Financial Results{chr(32)+chr(8212)+chr(32)+_per2 if _per2 else chr(32)}","time":_dtime,"source":"NSE Filings","link":_lnk2,"status":"published"}
         except Exception as _e2: _raw_dbg["error"] += f"filings: {_e2}; "
         # Published (actually filed) always takes priority over a mere calendar entry
         for _sy3 in list(_pub.keys()): _sched.pop(_sy3, None)
