@@ -15785,37 +15785,52 @@ if _nav_tab == "Results Monitor":
         _hd   = {"User-Agent":"Mozilla/5.0","Accept":"application/json","Referer":"https://www.nseindia.com/"}
         _sched = {}
         _pub   = {}
+        _raw_dbg = {"calendar_count": 0, "filings_raw_count": 0, "filings_today_count": 0, "error": ""}
         try:
             _ss1 = requests.Session()
             _ss1.get("https://www.nseindia.com", headers=_hd, timeout=8)
             _rsp1 = _ss1.get(f"https://www.nseindia.com/api/event-calendar?index=equities&from_date={_td}&to_date={_td}", headers=_hd, timeout=10)
             if _rsp1.status_code == 200:
                 _it1 = _rsp1.json() if isinstance(_rsp1.json(), list) else _rsp1.json().get("data",[])
+                _raw_dbg["calendar_count"] = len(_it1)
                 for _x in _it1:
                     _p = str(_x.get("purpose","")).strip()
                     if any(_k in _p.lower() for _k in ["financial result","quarterly result","annual result","half yearly","result"]):
                         _sy = str(_x.get("symbol","")).strip().upper()
                         if _sy: _sched[_sy] = {"symbol":str(_x.get("symbol","")).strip(),"purpose":_p,"time":"","source":"NSE Calendar","link":"","status":"scheduled"}
-        except Exception: pass
+        except Exception as _e1: _raw_dbg["error"] += f"calendar: {_e1}; "
         try:
+            # NSE's real financial-results filings endpoint (NOT "corporate-filings?index=financialResults" —
+            # that path doesn't exist and always returns nothing). This is the one nsepython/NseIndiaApi use.
             _ss2 = requests.Session()
             _ss2.get("https://www.nseindia.com", headers=_hd, timeout=8)
-            _rsp2 = _ss2.get(f"https://www.nseindia.com/api/corporate-filings?index=financialResults&from_date={_td}&to_date={_td}", headers=_hd, timeout=10)
+            _rsp2 = _ss2.get("https://www.nseindia.com/api/corporates-financial-results?index=equities&period=Quarterly", headers=_hd, timeout=10)
             if _rsp2.status_code == 200:
-                _it2 = _rsp2.json() if isinstance(_rsp2.json(), list) else _rsp2.json().get("data",[])
+                _jj2 = _rsp2.json()
+                _it2 = _jj2 if isinstance(_jj2, list) else _jj2.get("data", [])
+                _raw_dbg["filings_raw_count"] = len(_it2)
                 for _x2 in _it2:
                     _sym2 = str(_x2.get("symbol", _x2.get("companyName",""))).strip()
-                    _per2 = str(_x2.get("period","")).strip()
-                    _tm2  = str(_x2.get("submissionTime", _x2.get("filingTime",""))).strip()
-                    _lnk2 = str(_x2.get("attchmntFile", _x2.get("attachment",""))).strip()
-                    if _sym2 and _lnk2:  # only count as "published" if there's an actual filed document
+                    # NSE has used different field names for the broadcast/filing date over time — check all known variants
+                    _dtraw = str(_x2.get("bm_broadcast_date", _x2.get("broadcastDate", _x2.get("re_broadcast_timestamp", _x2.get("filingDate", _x2.get("submissionTime","")))))).strip()
+                    if not _dtraw: continue
+                    _dtonly = _dtraw.split(" ")[0].split("T")[0]
+                    # Broadcast date on NSE filings is usually DD-MMM-YYYY or YYYY-MM-DD — normalize both against today
+                    _is_today = (_dtonly == _td) or (_dtonly == datetime.now(_IST2).strftime("%Y-%m-%d")) or (datetime.now(_IST2).strftime("%d-%b-%Y").upper() in _dtraw.upper())
+                    if not _is_today: continue
+                    _raw_dbg["filings_today_count"] += 1
+                    _per2 = str(_x2.get("re_relating_to", _x2.get("relatingTo", _x2.get("period","")))).strip()
+                    _lnk2 = str(_x2.get("xbrl_attachment", _x2.get("xbrl", _x2.get("attchmntFile", _x2.get("attachment",""))))).strip()
+                    if _lnk2 and _lnk2.startswith("/"): _lnk2 = "https://nsearchives.nseindia.com" + _lnk2
+                    elif _lnk2 and not _lnk2.startswith("http"): _lnk2 = "https://nsearchives.nseindia.com/" + _lnk2.lstrip("/")
+                    if _sym2:
                         _sy2 = _sym2.upper()
-                        _pub[_sy2] = {"symbol":_sym2,"purpose":f"Financial Results{chr(32)+chr(8212)+chr(32)+_per2 if _per2 else chr(32)}","time":_tm2,"source":"NSE Filings","link":_lnk2,"status":"published"}
-        except Exception: pass
-        # Published (with a real, filed document) always takes priority over a mere calendar entry
+                        _pub[_sy2] = {"symbol":_sym2,"purpose":f"Financial Results{chr(32)+chr(8212)+chr(32)+_per2 if _per2 else chr(32)}","time":_dtraw,"source":"NSE Filings","link":_lnk2,"status":"published"}
+        except Exception as _e2: _raw_dbg["error"] += f"filings: {_e2}; "
+        # Published (actually filed) always takes priority over a mere calendar entry
         for _sy3 in list(_pub.keys()): _sched.pop(_sy3, None)
         _dd = list(_pub.values()) + list(_sched.values())
-        return _dd, datetime.now(_IST2).strftime("%I:%M:%S %p IST")
+        return _dd, datetime.now(_IST2).strftime("%I:%M:%S %p IST"), _raw_dbg
 
     _rcc1,_rcc2,_rcc3 = st.columns([3,1,1])
     with _rcc1: st.markdown(f"**📅 Today: {_ist_now_rm.strftime('%d %b %Y')}**")
@@ -15824,7 +15839,10 @@ if _nav_tab == "Results Monitor":
         if st.button("🔄 Refresh", key="rm_ref"):
             st.cache_data.clear(); st.rerun()
 
-    with st.spinner("Fetching NSE results..."): _rm_data, _rm_at = _rm_fetch()
+    with st.spinner("Fetching NSE results..."): _rm_data, _rm_at, _rm_dbg = _rm_fetch()
+    with st.expander("🔍 Debug info (tap if results look wrong)", expanded=False):
+        st.json(_rm_dbg)
+        st.caption("calendar_count = scheduled events found · filings_raw_count = total filings NSE returned · filings_today_count = of those, how many matched today's date. If filings_today_count stays 0 all evening while filings_raw_count > 0, the date-field name NSE uses has likely changed — share this debug box and I'll fix the matching.")
     st.caption(f"Last fetched: {_rm_at} — auto-refreshes every 2 min")
 
     _tg_tok_v  = st.session_state.get("rm_tg_tok_sv","8980379396:AAEWET_UzwkAwyaYDtzu3zm9WN81Ce2eU3g")
