@@ -985,6 +985,8 @@ except: _GH_REPO   = "devshah24m/stockdashboard"
 try:    _GH_BRANCH = st.secrets["GITHUB_BRANCH"]
 except: _GH_BRANCH = "main"
 
+_GH_LAST_ERRORS = {}   # path -> last human-readable error string, so the UI can show *why* a write failed
+
 def _gh_headers():
     return {"Authorization": f"token {_GH_TOKEN}",
             "Content-Type": "application/json",
@@ -1036,12 +1038,23 @@ def gh_write_file(path, text, msg=None):
         with _ur.urlopen(req2) as r:
             ok = "commit" in json.loads(r.read())
             print(f"[GH] write {path}: {'OK' if ok else 'FAIL'}")
+            if ok:
+                _GH_LAST_ERRORS.pop(path, None)
+            else:
+                _GH_LAST_ERRORS[path] = "GitHub accepted the request but returned no commit — unexpected response shape."
             return ok
     except _ue.HTTPError as ex:
-        print(f"[GH] HTTP {ex.code} writing {path}: {ex.read().decode()[:300]}")
+        _body = ""
+        try: _body = ex.read().decode()[:400]
+        except Exception: pass
+        _err = f"HTTP {ex.code} {ex.reason}: {_body}"
+        print(f"[GH] {_err} writing {path}")
+        _GH_LAST_ERRORS[path] = _err
         return False
     except Exception as ex:
-        print(f"[GH] write {path}: {ex}")
+        _err = f"{type(ex).__name__}: {ex}"
+        print(f"[GH] write {path}: {_err}")
+        _GH_LAST_ERRORS[path] = _err
         return False
 
 def gh_read_json(path, default=None):
@@ -6788,17 +6801,17 @@ def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
                 )
                 merged.to_csv(pf_path, index=False)
                 if not _local_sync_to_gh(pf_path, pf_path, f"Import: portfolio for {cid}"):
-                    gh_failures.append(f"Portfolio for {cid}")
+                    gh_failures.append((f"Portfolio for {cid}", pf_path))
             else:
                 trade_df.to_csv(pf_path, index=False)
                 if not _local_sync_to_gh(pf_path, pf_path, f"Import: portfolio for {cid}"):
-                    gh_failures.append(f"Portfolio for {cid}")
+                    gh_failures.append((f"Portfolio for {cid}", pf_path))
 
             imported_trades += len(trade_df)
 
         # ── Save clients.json ──
         if not save_clients_fn(clients_dict_ref):
-            gh_failures.append("clients.json (all client accounts)")
+            gh_failures.append(("clients.json (all client accounts)", CLIENTS_FILE))
 
         return imported_clients, skipped_clients, imported_trades, gh_failures
 
@@ -6807,14 +6820,16 @@ def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
         msg = f"{ic} client(s) {verb}, {sc} skipped, {it} trade(s) saved."
         if gh_failures:
             st.warning(f"⚠️ {msg}")
+            _detail_lines = []
+            for _label, _path in gh_failures:
+                _err = _GH_LAST_ERRORS.get(_path)
+                _detail_lines.append(f"- **{_label}**" + (f"\n  \n  `{_err}`" if _err else ""))
             st.error(
                 "❌ **GitHub save FAILED for:**\n\n" +
-                "\n".join(f"- {f}" for f in gh_failures) +
+                "\n".join(_detail_lines) +
                 "\n\nThis data exists only in this session's local storage right now and "
-                "**will be lost on the next app restart**. Check the app logs for a `[GH]` line "
-                "explaining why (bad/expired GITHUB_TOKEN, wrong GITHUB_REPO/GITHUB_BRANCH, or "
-                "no write permission on the token), fix it, then re-run the import with "
-                "**Import & Overwrite All** to push everything again."
+                "**will be lost on the next app restart**. Fix the issue above, then re-run "
+                "the import with **Import & Overwrite All** to push everything again."
             )
         else:
             st.success(f"✅ Done! {msg}")
@@ -6827,21 +6842,31 @@ def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn,
             use_container_width=True, type="primary", key="mi_combined_import_btn",
             disabled=(new_count == 0)
         ):
-            ic, sc, it, gh_failures = _do_import(overwrite_existing=False)
-            _report_result(ic, sc, it, gh_failures, overwrote=False)
-            if not gh_failures:
-                st.balloons()
-                st.rerun()
+            try:
+                ic, sc, it, gh_failures = _do_import(overwrite_existing=False)
+                _report_result(ic, sc, it, gh_failures, overwrote=False)
+                if not gh_failures:
+                    st.balloons()
+                    st.rerun()
+            except Exception as _mi_ex:
+                st.error("❌ Import crashed partway through — nothing after this point was saved. "
+                          "Full error below (also check 'Manage app' → Logs on Streamlit Cloud):")
+                st.exception(_mi_ex)
 
     with ca2:
         if st.button(
             f"🔄 Import & Overwrite All ({len(summary_df)} clients)",
             use_container_width=True, type="secondary", key="mi_combined_overwrite_btn"
         ):
-            ic, sc, it, gh_failures = _do_import(overwrite_existing=True)
-            _report_result(ic, sc, it, gh_failures, overwrote=True)
-            if not gh_failures:
-                st.rerun()
+            try:
+                ic, sc, it, gh_failures = _do_import(overwrite_existing=True)
+                _report_result(ic, sc, it, gh_failures, overwrote=True)
+                if not gh_failures:
+                    st.rerun()
+            except Exception as _mi_ex:
+                st.error("❌ Import crashed partway through — nothing after this point was saved. "
+                          "Full error below (also check 'Manage app' → Logs on Streamlit Cloud):")
+                st.exception(_mi_ex)
 
 
 
