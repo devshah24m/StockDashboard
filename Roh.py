@@ -15785,7 +15785,7 @@ if _nav_tab == "Results Monitor":
         _hd   = {"User-Agent":"Mozilla/5.0","Accept":"application/json","Referer":"https://www.nseindia.com/"}
         _sched = {}
         _pub   = {}
-        _raw_dbg = {"calendar_count": 0, "filings_raw_count": 0, "filings_today_count": 0, "error": ""}
+        _raw_dbg = {"calendar_count": 0, "filings_raw_count": 0, "filings_today_count": 0, "error": "", "today_expected_format": datetime.now(_IST2).strftime("%d-%b-%Y")}
         try:
             _ss1 = requests.Session()
             _ss1.get("https://www.nseindia.com", headers=_hd, timeout=8)
@@ -15818,6 +15818,23 @@ if _nav_tab == "Results Monitor":
             if True:
                 _raw_dbg["filings_raw_count"] = len(_it2)
                 if _it2: _raw_dbg["sample_record"] = _it2[0]
+                # DIAGNOSTIC: find the most recent broadCastDate NSE actually gave us,
+                # and pull out any record whose symbol/company contains "LINCOLN" —
+                # regardless of date — so we can see its raw date field directly.
+                _all_dates_seen = []
+                _lincoln_hits = []
+                for _xd in _it2:
+                    _ddraw = str(_xd.get("broadCastDate", _xd.get("bm_broadcast_date", _xd.get("filingDate", "")))).strip()
+                    if _ddraw: _all_dates_seen.append(_ddraw.split(" ")[0])
+                    _symchk = (str(_xd.get("symbol","")) + " " + str(_xd.get("companyName",""))).upper()
+                    if "LINCOLN" in _symchk: _lincoln_hits.append(_xd)
+                if _all_dates_seen:
+                    try:
+                        _parsed_dates = sorted(_all_dates_seen, key=lambda d: datetime.strptime(d, "%d-%b-%Y"))
+                        _raw_dbg["most_recent_date_in_feed"] = _parsed_dates[-1]
+                        _raw_dbg["oldest_date_in_feed"] = _parsed_dates[0]
+                    except Exception as _epd: _raw_dbg["date_parse_error"] = str(_epd)
+                _raw_dbg["lincoln_raw_hits"] = _lincoln_hits[:5]
                 for _x2 in _it2:
                     _sym2 = str(_x2.get("symbol", _x2.get("companyName",""))).strip()
                     # Confirmed real NSE field: "broadCastDate", format "30-Jul-2026 17:17:53"
