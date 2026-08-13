@@ -1005,8 +1005,11 @@ def gh_read_file(path):
         print(f"[GH] read {path}: {ex}")
         return None, None
 
-def gh_write_file(path, text, msg=None):
-    """Write text to GitHub file. Returns True on success."""
+def gh_write_file(path, text, msg=None, _retry=True):
+    """Write text to GitHub file. Returns True on success.
+    Self-healing: if the write is rejected because our SHA was stale/missing
+    (409/422 — common when updating a file that already exists), automatically
+    re-fetches the current SHA and retries once before giving up."""
     if not _GH_TOKEN:
         print("[GH] No token — skipping write")
         _GH_LAST_ERRORS[path] = "No GITHUB_TOKEN configured in st.secrets — write was never attempted."
@@ -1020,8 +1023,8 @@ def gh_write_file(path, text, msg=None):
                 headers=_gh_headers())
             with _ur.urlopen(req) as r:
                 sha = json.loads(r.read()).get("sha")
-        except Exception:
-            pass
+        except Exception as _sha_ex:
+            print(f"[GH] SHA fetch failed for {path}: {_sha_ex}")
 
         payload = {
             "message": msg or f"auto-save: {path}",
@@ -1050,6 +1053,11 @@ def gh_write_file(path, text, msg=None):
         except Exception: pass
         _err = f"HTTP {ex.code} {ex.reason}: {_body}"
         print(f"[GH] {_err} writing {path}")
+        # 409 = SHA conflict, 422 = often "sha wasn't supplied" for an existing file.
+        # Both usually mean our SHA was stale or missing — retry once with a fresh fetch.
+        if _retry and ex.code in (409, 422):
+            print(f"[GH] Retrying {path} once with a fresh SHA...")
+            return gh_write_file(path, text, msg, _retry=False)
         _GH_LAST_ERRORS[path] = _err
         return False
     except Exception as ex:
