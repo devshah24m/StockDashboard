@@ -6205,29 +6205,33 @@ with st.sidebar:
                     st.success("\u2705 Password updated!")
 
 # =========================================================
-# KING IMPORT — minimal columns, 100% direct to GitHub
+# KING IMPORT — 100% direct to GitHub
 # =========================================================
 # Columns required in the uploaded Excel (exact header text):
-#   Client ID | Client Name | Password | Stock | Quantity | Buy Price | Buy Date | Sell Price | Sell Date
-# Sell Price / Sell Date are optional (leave blank for an open position).
-# Every trade is treated as Asset Class "Equity" and uses the full Quantity as the sell quantity
-# when a sell is given (no partial-sell column, by design — keep it simple).
+#   Client ID | Client Name | Password | Stock Name | Asset Class |
+#   Buy Price | Buy Qty | Buy Date | Sell Qty | Sell Price | Sell Date
+# Sell Qty / Sell Price / Sell Date are optional (leave blank for an open position).
 
-_KI_REQUIRED_COLS = ["Client ID", "Client Name", "Password", "Stock", "Quantity", "Buy Price", "Buy Date"]
-_KI_OPTIONAL_COLS = ["Sell Price", "Sell Date"]
+_KI_ASSET_CLASSES = [
+    "Equity", "F&O - Futures", "F&O - Options",
+    "Mutual Fund", "ETF", "SGBs (Gold Bonds)", "Currency", "Commodity",
+]
+_KI_SHORT_SUPPORTED = {"Equity", "F&O - Futures", "F&O - Options", "Currency", "Commodity"}
+_KI_REQUIRED_COLS = ["Client ID", "Client Name", "Password", "Stock Name", "Asset Class",
+                      "Buy Price", "Buy Qty", "Buy Date"]
+_KI_OPTIONAL_COLS = ["Sell Qty", "Sell Price", "Sell Date"]
 
 
 def _ki_generate_template() -> bytes:
     """Tiny one-sheet Excel template matching the King Import columns exactly."""
-    import openpyxl
     from openpyxl import Workbook
     wb = Workbook()
     ws = wb.active
     ws.title = "Import"
     headers = _KI_REQUIRED_COLS + _KI_OPTIONAL_COLS
     ws.append(headers)
-    ws.append(["HO667", "Rohith Sir", "mypassword123", "RELIANCE", 10, 2500, "2025-01-15", "", ""])
-    ws.append(["HO667", "Rohith Sir", "mypassword123", "TCS", 5, 3800, "2025-02-01", 4100, "2025-06-10"])
+    ws.append(["HO667", "Rohith Sir", "mypassword123", "RELIANCE", "Equity", 2500, 10, "2025-01-15", "", "", ""])
+    ws.append(["HO667", "Rohith Sir", "mypassword123", "TCS", "Equity", 3800, 5, "2025-02-01", 5, 4100, "2025-06-10"])
     for i, h in enumerate(headers, start=1):
         ws.column_dimensions[chr(64 + i)].width = max(14, len(h) + 4)
     buf = io.BytesIO()
@@ -6249,7 +6253,7 @@ def show_king_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn, dev_code
             border-radius:12px;padding:16px 24px;margin-bottom:18px;">
   <div style="font-size:20px;font-weight:800;color:#f0f2ff;">👑 King Import</div>
   <div style="font-size:12px;color:#8888aa;margin-top:4px;">
-    Client ID · Name · Password · Stock · Quantity · Buy Price · Buy Date · Sell Price · Sell Date — pushed straight to GitHub, nothing local.
+    Client ID · Client Name · Password · Stock Name · Asset Class · Buy Price · Buy Qty · Buy Date · Sell Qty · Sell Price · Sell Date — pushed straight to GitHub, nothing local.
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -6304,41 +6308,46 @@ def show_king_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn, dev_code
         cid   = str(row.get("Client ID", "")).strip().upper()
         cname = str(row.get("Client Name", "")).strip()
         cpw   = str(row.get("Password", "")).strip()
-        stock = str(row.get("Stock", "")).strip()
+        sname = str(row.get("Stock Name", "")).strip()
+        ac    = str(row.get("Asset Class", "")).strip()
 
         if not cid:   errors.append(f"Row {rn}: Client ID is empty.")
         if not cname: errors.append(f"Row {rn}: Client Name is empty.")
         if not cpw:   errors.append(f"Row {rn}: Password is empty.")
         if cid == dev_code_ref.upper():
             errors.append(f"Row {rn}: '{cid}' is the developer code — cannot use as Client ID.")
-        if not stock: errors.append(f"Row {rn}: Stock is empty.")
-
-        try:
-            qty = int(float(row["Quantity"]))
-            if qty == 0: errors.append(f"Row {rn} ({stock}): Quantity cannot be 0.")
-        except Exception:
-            errors.append(f"Row {rn} ({stock}): Quantity is not a valid number."); qty = None
+        if not sname: errors.append(f"Row {rn}: Stock Name is empty.")
+        if ac not in _KI_ASSET_CLASSES:
+            errors.append(f"Row {rn} ({sname}): Asset Class '{ac}' is invalid. Must be one of: {', '.join(_KI_ASSET_CLASSES)}.")
 
         try:
             bp = float(row["Buy Price"])
-            if bp <= 0: errors.append(f"Row {rn} ({stock}): Buy Price must be > 0.")
+            if bp <= 0: errors.append(f"Row {rn} ({sname}): Buy Price must be > 0.")
         except Exception:
-            errors.append(f"Row {rn} ({stock}): Buy Price is not a valid number."); bp = None
+            errors.append(f"Row {rn} ({sname}): Buy Price is not a valid number."); bp = None
+
+        try:
+            bq = int(float(row["Buy Qty"]))
+            if bq == 0: errors.append(f"Row {rn} ({sname}): Buy Qty cannot be 0.")
+            if bq < 0 and ac not in _KI_SHORT_SUPPORTED:
+                errors.append(f"Row {rn} ({sname}): Short sell not supported for '{ac}'.")
+        except Exception:
+            errors.append(f"Row {rn} ({sname}): Buy Qty is not a valid number."); bq = None
 
         if not str(row.get("Buy Date", "")).strip():
-            errors.append(f"Row {rn} ({stock}): Buy Date is empty.")
+            errors.append(f"Row {rn} ({sname}): Buy Date is empty.")
 
-        sp, sd = row.get("Sell Price"), row.get("Sell Date")
-        sell_given = [pd.notna(x) and str(x).strip() not in ("", "nan") for x in [sp, sd]]
+        sq, sp, sd = row.get("Sell Qty"), row.get("Sell Price"), row.get("Sell Date")
+        sell_given = [pd.notna(x) and str(x).strip() not in ("", "nan") for x in [sq, sp, sd]]
         if any(sell_given) and not all(sell_given):
-            errors.append(f"Row {rn} ({stock}): Sell Price and Sell Date must both be filled or both left empty.")
+            errors.append(f"Row {rn} ({sname}): Sell Qty, Sell Price & Sell Date must all be filled or all left empty.")
 
-        if cid and cname and cpw and stock and qty is not None and bp is not None:
+        if cid and cname and cpw and sname and ac in _KI_ASSET_CLASSES and bp is not None and bq is not None:
             valid_rows.append({
                 "Client ID": cid, "Client Name": cname, "Password": cpw,
-                "Stock": stock, "Quantity": qty, "Buy Price": bp,
-                "Buy Date": row["Buy Date"],
-                "Sell Price": row.get("Sell Price"), "Sell Date": row.get("Sell Date"),
+                "Stock Name": sname, "Asset Class": ac,
+                "Buy Price": bp, "Buy Qty": bq, "Buy Date": row["Buy Date"],
+                "Sell Qty": row.get("Sell Qty"), "Sell Price": row.get("Sell Price"), "Sell Date": row.get("Sell Date"),
             })
 
     if errors:
@@ -6375,7 +6384,10 @@ def show_king_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn, dev_code
     m3.metric("Already Exist", int((summary_df["Status"] == "⚠️ Already exists").sum()))
 
     with st.expander("📋 Full Trade Preview", expanded=False):
-        st.dataframe(valid_df, use_container_width=True, hide_index=True)
+        st.dataframe(
+            valid_df[["Client ID","Client Name","Stock Name","Asset Class","Buy Price","Buy Qty","Buy Date","Sell Qty","Sell Price","Sell Date"]],
+            use_container_width=True, hide_index=True
+        )
 
     st.markdown("---")
 
@@ -6396,15 +6408,16 @@ def show_king_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn, dev_code
             else:
                 skipped_clients += 1
 
-            trade_df = pd.DataFrame({
-                "Ticker":      grp["Stock"],
-                "Asset_Type":  "Equity",
-                "Buy_Price":   grp["Buy Price"],
-                "Shares":      grp["Quantity"],
-                "Buy_Date":    grp["Buy Date"],
-                "Sell_Qty":    grp["Quantity"].where(grp["Sell Price"].notna() & (grp["Sell Price"].astype(str).str.strip() != ""), None),
-                "Sell_Price":  grp["Sell Price"],
-                "Sell_Date":   grp["Sell Date"],
+            trade_cols = ["Stock Name","Asset Class","Buy Price","Buy Qty","Buy Date","Sell Qty","Sell Price","Sell Date"]
+            trade_df = grp[trade_cols].copy().rename(columns={
+                "Stock Name":  "Ticker",
+                "Buy Price":   "Buy_Price",
+                "Buy Qty":     "Shares",
+                "Buy Date":    "Buy_Date",
+                "Sell Qty":    "Sell_Qty",
+                "Sell Price":  "Sell_Price",
+                "Sell Date":   "Sell_Date",
+                "Asset Class": "Asset_Type",
             })
 
             gh_path = _ki_gh_portfolio_path(cid)
