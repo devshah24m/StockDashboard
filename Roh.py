@@ -15804,10 +15804,18 @@ if _nav_tab == "Results Monitor":
             # that path doesn't exist and always returns nothing). This is the one nsepython/NseIndiaApi use.
             _ss2 = requests.Session()
             _ss2.get("https://www.nseindia.com", headers=_hd, timeout=8)
-            _rsp2 = _ss2.get("https://www.nseindia.com/api/corporates-financial-results?index=equities&period=Quarterly", headers=_hd, timeout=10)
-            if _rsp2.status_code == 200:
-                _jj2 = _rsp2.json()
-                _it2 = _jj2 if isinstance(_jj2, list) else _jj2.get("data", [])
+            # NSE requires an explicit period; it does NOT return all periods by default.
+            # Querying only "Quarterly" silently drops Annual / Half Yearly / Others filings.
+            _it2 = []
+            for _per_q in ("Quarterly", "Half-Yearly", "Annual", "Others"):
+                try:
+                    _rsp2 = _ss2.get(f"https://www.nseindia.com/api/corporates-financial-results?index=equities&period={_per_q}", headers=_hd, timeout=10)
+                    if _rsp2.status_code == 200:
+                        _jj2 = _rsp2.json()
+                        _chunk2 = _jj2 if isinstance(_jj2, list) else _jj2.get("data", [])
+                        _it2.extend(_chunk2)
+                except Exception as _eper: _raw_dbg["error"] += f"filings[{_per_q}]: {_eper}; "
+            if True:
                 _raw_dbg["filings_raw_count"] = len(_it2)
                 if _it2: _raw_dbg["sample_record"] = _it2[0]
                 for _x2 in _it2:
