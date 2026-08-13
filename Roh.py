@@ -1067,12 +1067,13 @@ def gh_write_file(path, text, msg=None, _retry=True):
         return False
 
 def gh_read_json(path, default=None):
-    """Read JSON file from GitHub → dict/list, or default."""
+    """Read JSON file from GitHub → dict/list, or `default` (unchanged, not coerced).
+    Caller decides how to tell 'read failed' apart from 'file is genuinely empty'."""
     text, _ = gh_read_file(path)
     if text:
         try: return json.loads(text)
         except: pass
-    return default if default is not None else {}
+    return default
 
 def gh_write_json(path, obj, msg=None):
     return gh_write_file(path, json.dumps(obj, indent=2), msg)
@@ -1129,6 +1130,7 @@ def load_clients():
     _gh_data = gh_read_json(CLIENTS_FILE, default=None)
     if _gh_data is not None:
         data = _gh_data
+        return data
     elif os.path.exists(CLIENTS_FILE):
         with open(CLIENTS_FILE) as f:
             data = json.load(f)
@@ -1163,7 +1165,7 @@ def load_clients():
 
 def save_clients(d):
     """Save clients dict → GitHub directly (no local disk)."""
-    gh_write_json(CLIENTS_FILE, d, "auto-save: clients.json")
+    return gh_write_json(CLIENTS_FILE, d, "auto-save: clients.json")
 
 def hash_password(pw: str) -> str:
     if not pw:
@@ -1394,6 +1396,12 @@ with st.sidebar:
 
     _cur_nav = st.session_state.get("nav_tab", "Portfolio")
 
+    # ── Master Import (dev only) ──────────────────────────────
+    if _is_dev:
+        if st.button("📥 Master Import", key="nav_master_import", use_container_width=True,
+                     type="primary" if _cur_nav == "Master Import" else "secondary"):
+            st.session_state["nav_tab"] = "Master Import"
+            st.rerun()
     for _nav_key, _nav_label in _NAV_ITEMS:
         _is_active = (_cur_nav == _nav_key)
         _btn_style = """
@@ -6199,6 +6207,378 @@ with st.sidebar:
                     st.success("\u2705 Password updated!")
 
 # =========================================================
+# MASTER IMPORT — admin-only bulk client+portfolio import
+# 100% pushed to GitHub, nothing local, built for resilience
+# =========================================================
+# Columns required in the uploaded Excel (exact header text):
+#   Client ID | Client Name | Password | Stock Name | Asset Class |
+#   Buy Price | Buy Qty | Buy Date | Sell Qty | Sell Price | Sell Date
+# Sell Qty / Sell Price / Sell Date are optional (leave blank for an open position).
+#
+# WHY THIS IS BUILT DIFFERENTLY FROM THE OLD IMPORT:
+# clients.json is now saved after EVERY client, not once at the end —
+# so if GitHub rate-limits or errors out on client #47, clients #1–46
+# are still fully registered and logged-in-able. Each client is wrapped
+# in its own try/except so one bad row can't abort the other 99. Every
+# GitHub write is retried with backoff on rate-limit responses, and
+# verified by reading the file back before it's marked as done.
+
+import time as _mi_time
+
+_MI_ASSET_CLASSES = [
+    "Equity", "F&O - Futures", "F&O - Options",
+    "Mutual Fund", "ETF", "SGBs (Gold Bonds)", "Currency", "Commodity",
+]
+_MI_SHORT_SUPPORTED = {"Equity", "F&O - Futures", "F&O - Options", "Currency", "Commodity"}
+_MI_REQUIRED_COLS = ["Client ID", "Client Name", "Password", "Stock Name", "Asset Class",
+                      "Buy Price", "Buy Qty", "Buy Date"]
+_MI_OPTIONAL_COLS = ["Sell Qty", "Sell Price", "Sell Date"]
+
+
+def _mi_generate_template() -> bytes:
+    """One-sheet Excel template matching the Master Import columns exactly."""
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Import"
+    headers = _MI_REQUIRED_COLS + _MI_OPTIONAL_COLS
+    ws.append(headers)
+    ws.append(["HO667", "Rohith Sir", "mypassword123", "RELIANCE", "Equity", 2500, 10, "2025-01-15", "", "", ""])
+    ws.append(["HO667", "Rohith Sir", "mypassword123", "TCS", "Equity", 3800, 5, "2025-02-01", 5, 4100, "2025-06-10"])
+    for i, h in enumerate(headers, start=1):
+        ws.column_dimensions[chr(64 + i)].width = max(14, len(h) + 4)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def _mi_gh_portfolio_path(cid):
+    safe = re.sub(r"[^\w\-]", "_", str(cid).strip().upper())
+    return f"portfolio_{safe}.csv"
+
+
+def _mi_write_with_retry(write_fn, *args, max_attempts=4, **kwargs):
+    """Wrap any gh_write_* call with backoff on rate-limit / transient failures.
+    gh_write_file already retries once on 409/422 SHA conflicts — this adds a
+    slower outer retry specifically for 403 (secondary rate limit) and 429,
+    plus generic transient failures, since GitHub's abuse-detection kicks in
+    fast when you fire 100+ sequential writes."""
+    last_ok = False
+    for attempt in range(max_attempts):
+        last_ok = write_fn(*args, **kwargs)
+        if last_ok:
+            return True
+        _mi_time.sleep(1.5 * (attempt + 1))  # 1.5s, 3s, 4.5s, 6s backoff
+    return last_ok
+
+
+def _mi_verify_portfolio(gh_path, expected_row_count):
+    """Read the file back from GitHub and confirm it actually landed with the
+    right row count. Returns True only if verification succeeds."""
+    text, _ = gh_read_file(gh_path)
+    if text is None:
+        return False
+    try:
+        verify_df = pd.read_csv(io.StringIO(text))
+        return len(verify_df) >= expected_row_count
+    except Exception:
+        return False
+
+
+def show_master_import_tab(clients_dict_ref, save_clients_fn, hash_pw_fn, dev_code_ref):
+    """Master Import — admin-only. Reads the Northeast Master Import template,
+    writes clients + portfolios straight to GitHub, verifies every write, and
+    never lets one client's failure take down the rest of the batch."""
+
+    st.markdown("""
+<div style="background:linear-gradient(135deg,#0f0f23,#1a1a3e);border:1px solid #2a2a5a;
+            border-radius:12px;padding:16px 24px;margin-bottom:18px;">
+  <div style="font-size:20px;font-weight:800;color:#f0f2ff;">📥 Master Import</div>
+  <div style="font-size:12px;color:#8888aa;margin-top:4px;">
+    Client ID · Client Name · Password · Stock Name · Asset Class · Buy Price · Buy Qty · Buy Date · Sell Qty · Sell Price · Sell Date
+    — each client saved to GitHub individually and verified, so one failure never loses the batch.
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    if not _GH_TOKEN:
+        st.error(
+            "⚠️ **GITHUB_TOKEN is not configured in st.secrets.** Nothing can be imported until this is set — "
+            "add GITHUB_TOKEN (and GITHUB_REPO / GITHUB_BRANCH if needed) under Settings → Secrets."
+        )
+        return
+
+    col_dl, _ = st.columns([1, 3])
+    with col_dl:
+        st.download_button(
+            "⬇️ Download Template (.xlsx)",
+            data=_mi_generate_template(),
+            file_name="Northeast_Master_Import_Template.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="mi_dl_template",
+        )
+
+    st.markdown("---")
+    uploaded = st.file_uploader(
+        "Upload filled Excel file", type=["xlsx", "xls"], key="mi_upload"
+    )
+    if uploaded is None:
+        st.info("👆 Upload your filled Excel to preview and import.")
+        return
+
+    try:
+        raw_df = pd.read_excel(uploaded, dtype=str)
+        raw_df.columns = [str(c).strip() for c in raw_df.columns]
+    except Exception as e:
+        st.error(f"Could not read file: {e}")
+        return
+
+    missing = [c for c in _MI_REQUIRED_COLS if c not in raw_df.columns]
+    if missing:
+        st.error(f"❌ Missing columns: {', '.join(missing)}")
+        st.markdown("Required columns: " + ", ".join(_MI_REQUIRED_COLS + _MI_OPTIONAL_COLS))
+        st.dataframe(raw_df.head(), use_container_width=True, hide_index=True)
+        return
+    for c in _MI_OPTIONAL_COLS:
+        if c not in raw_df.columns:
+            raw_df[c] = None
+
+    raw_df = raw_df.dropna(how="all").reset_index(drop=True)
+
+    errors, valid_rows = [], []
+    for i, row in raw_df.iterrows():
+        rn = i + 2
+        cid   = str(row.get("Client ID", "")).strip().upper()
+        cname = str(row.get("Client Name", "")).strip()
+        cpw   = str(row.get("Password", "")).strip()
+        sname = str(row.get("Stock Name", "")).strip()
+        ac    = str(row.get("Asset Class", "")).strip()
+
+        if not cid:   errors.append(f"Row {rn}: Client ID is empty.")
+        if not cname: errors.append(f"Row {rn}: Client Name is empty.")
+        if not cpw:   errors.append(f"Row {rn}: Password is empty.")
+        if cid == dev_code_ref.upper():
+            errors.append(f"Row {rn}: '{cid}' is the developer code — cannot use as Client ID.")
+        if not sname: errors.append(f"Row {rn}: Stock Name is empty.")
+        if ac not in _MI_ASSET_CLASSES:
+            errors.append(f"Row {rn} ({sname}): Asset Class '{ac}' is invalid. Must be one of: {', '.join(_MI_ASSET_CLASSES)}.")
+
+        try:
+            bp = float(row["Buy Price"])
+            if bp <= 0: errors.append(f"Row {rn} ({sname}): Buy Price must be > 0.")
+        except Exception:
+            errors.append(f"Row {rn} ({sname}): Buy Price is not a valid number."); bp = None
+
+        try:
+            bq = int(float(row["Buy Qty"]))
+            if bq == 0: errors.append(f"Row {rn} ({sname}): Buy Qty cannot be 0.")
+            if bq < 0 and ac not in _MI_SHORT_SUPPORTED:
+                errors.append(f"Row {rn} ({sname}): Short sell not supported for '{ac}'.")
+        except Exception:
+            errors.append(f"Row {rn} ({sname}): Buy Qty is not a valid number."); bq = None
+
+        if not str(row.get("Buy Date", "")).strip():
+            errors.append(f"Row {rn} ({sname}): Buy Date is empty.")
+
+        sq, sp, sd = row.get("Sell Qty"), row.get("Sell Price"), row.get("Sell Date")
+        sell_given = [pd.notna(x) and str(x).strip() not in ("", "nan") for x in [sq, sp, sd]]
+        if any(sell_given) and not all(sell_given):
+            errors.append(f"Row {rn} ({sname}): Sell Qty, Sell Price & Sell Date must all be filled or all left empty.")
+
+        if cid and cname and cpw and sname and ac in _MI_ASSET_CLASSES and bp is not None and bq is not None:
+            valid_rows.append({
+                "Client ID": cid, "Client Name": cname, "Password": cpw,
+                "Stock Name": sname, "Asset Class": ac,
+                "Buy Price": bp, "Buy Qty": bq, "Buy Date": row["Buy Date"],
+                "Sell Qty": row.get("Sell Qty"), "Sell Price": row.get("Sell Price"), "Sell Date": row.get("Sell Date"),
+            })
+
+    if errors:
+        st.error(f"**{len(errors)} issue(s) found — fix before importing:**")
+        for err in errors[:20]:
+            st.markdown(f"- {err}")
+        if len(errors) > 20:
+            st.markdown(f"*...and {len(errors)-20} more.*")
+        return
+
+    if not valid_rows:
+        st.error("No valid rows found.")
+        return
+
+    valid_df = pd.DataFrame(valid_rows)
+    client_groups = valid_df.groupby("Client ID")
+    summary_rows = []
+    for cid, grp in client_groups:
+        summary_rows.append({
+            "Client ID": cid,
+            "Client Name": grp["Client Name"].iloc[0],
+            "Trades": len(grp),
+            "Status": "🆕 New" if cid not in clients_dict_ref else "⚠️ Already exists",
+        })
+    summary_df = pd.DataFrame(summary_rows)
+    new_count = (summary_df["Status"] == "🆕 New").sum()
+
+    st.success(f"✅ {len(valid_df)} valid trade(s) across {len(summary_df)} client(s) found. Preview:")
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total Clients", len(summary_df))
+    m2.metric("New Clients", int(new_count))
+    m3.metric("Already Exist", int((summary_df["Status"] == "⚠️ Already exists").sum()))
+
+    with st.expander("📋 Full Trade Preview", expanded=False):
+        st.dataframe(
+            valid_df[["Client ID","Client Name","Stock Name","Asset Class","Buy Price","Buy Qty","Buy Date","Sell Qty","Sell Price","Sell Date"]],
+            use_container_width=True, hide_index=True
+        )
+
+    st.markdown("---")
+
+    def _do_import(overwrite_existing: bool, only_codes=None):
+        """Processes each client independently. A failure on one client is
+        caught, logged, and skipped — it never aborts the remaining clients,
+        and clients.json is saved after every single client so partial runs
+        are never lost."""
+        results = []  # list of dicts: {code, name, status, detail}
+        groups_to_run = (
+            [(cid, grp) for cid, grp in client_groups if only_codes is None or cid in only_codes]
+        )
+        total = len(groups_to_run)
+        progress = st.progress(0.0)
+        status_text = st.empty()
+
+        for idx, (cid, grp) in enumerate(groups_to_run):
+            status_text.text(f"Processing {cid} ({idx + 1}/{total})...")
+            cname = grp["Client Name"].iloc[0]
+            cpw   = grp["Password"].iloc[0]
+
+            try:
+                is_new = cid not in clients_dict_ref
+                if is_new or overwrite_existing:
+                    clients_dict_ref[cid] = {
+                        "display_name":  cname,
+                        "password_hash": hash_pw_fn(cpw),
+                    }
+                    client_registered = True
+                else:
+                    client_registered = False  # already exists, not overwriting — portfolio still merges below
+
+                trade_cols = ["Stock Name","Asset Class","Buy Price","Buy Qty","Buy Date","Sell Qty","Sell Price","Sell Date"]
+                trade_df = grp[trade_cols].copy().rename(columns={
+                    "Stock Name":  "Ticker",
+                    "Buy Price":   "Buy_Price",
+                    "Buy Qty":     "Shares",
+                    "Buy Date":    "Buy_Date",
+                    "Sell Qty":    "Sell_Qty",
+                    "Sell Price":  "Sell_Price",
+                    "Sell Date":   "Sell_Date",
+                    "Asset Class": "Asset_Type",
+                })
+
+                gh_path = _mi_gh_portfolio_path(cid)
+                if not overwrite_existing:
+                    existing_pf = gh_read_csv(gh_path)
+                    if not existing_pf.empty:
+                        merged = pd.concat([existing_pf, trade_df], ignore_index=True).drop_duplicates(
+                            subset=["Ticker", "Asset_Type", "Buy_Date", "Buy_Price", "Shares"], keep="last"
+                        )
+                    else:
+                        merged = trade_df
+                else:
+                    merged = trade_df
+
+                write_ok = _mi_write_with_retry(gh_write_csv, merged, gh_path, f"Master Import: portfolio for {cid}")
+                if not write_ok:
+                    results.append({"code": cid, "name": cname, "status": "❌ Portfolio write failed",
+                                     "detail": _GH_LAST_ERRORS.get(gh_path, "unknown error")})
+                    progress.progress((idx + 1) / total)
+                    continue
+
+                verified = _mi_verify_portfolio(gh_path, expected_row_count=len(merged))
+                if not verified:
+                    results.append({"code": cid, "name": cname, "status": "⚠️ Wrote but verify failed",
+                                     "detail": "GitHub accepted the write but read-back didn't match — re-run import for this client."})
+                    progress.progress((idx + 1) / total)
+                    continue
+
+                # Save clients.json AFTER EVERY CLIENT — this is the fix for the
+                # old bug where one failure mid-batch meant clients.json never
+                # got saved at all, silently losing every client processed so far.
+                client_save_ok = _mi_write_with_retry(save_clients_fn, clients_dict_ref)
+                if not client_save_ok:
+                    results.append({"code": cid, "name": cname, "status": "⚠️ Portfolio OK, client record failed",
+                                     "detail": "Portfolio saved & verified, but clients.json save failed — client won't be able to log in yet. Re-run import for this client."})
+                    progress.progress((idx + 1) / total)
+                    continue
+
+                results.append({"code": cid, "name": cname,
+                                 "status": "🆕 Registered" if client_registered else "✅ Portfolio merged",
+                                 "detail": f"{len(trade_df)} trade(s) saved & verified."})
+
+            except Exception as ex:
+                results.append({"code": cid, "name": cname, "status": "❌ Crashed",
+                                 "detail": f"{type(ex).__name__}: {ex}"})
+
+            progress.progress((idx + 1) / total)
+
+        status_text.empty()
+        progress.empty()
+        return results
+
+    def _report_result(results):
+        results_df = pd.DataFrame(results)
+        succeeded = results_df[results_df["status"].str.startswith(("🆕", "✅"))]
+        failed = results_df[~results_df["status"].str.startswith(("🆕", "✅"))]
+
+        if failed.empty:
+            st.success(f"✅ Done! All {len(succeeded)} client(s) imported and verified on GitHub.")
+            st.balloons()
+        else:
+            st.warning(f"⚠️ {len(succeeded)} succeeded, {len(failed)} failed. Nothing else was skipped or aborted.")
+            st.dataframe(results_df, use_container_width=True, hide_index=True)
+            st.session_state["mi_failed_codes"] = failed["code"].tolist()
+            st.error(
+                f"❌ **{len(failed)} client(s) failed** — their data may be partially saved. "
+                "Use the retry button below to re-attempt only these, without touching the ones that already succeeded."
+            )
+
+        if succeeded.empty and failed.empty:
+            st.info("Nothing was processed.")
+
+        return results_df
+
+    ca1, ca2 = st.columns(2)
+    with ca1:
+        if st.button(f"➕ Import {int(new_count)} New Client(s)", use_container_width=True,
+                     type="primary", key="mi_import_btn", disabled=(new_count == 0)):
+            results = _do_import(overwrite_existing=False)
+            _report_result(results)
+            if not st.session_state.get("mi_failed_codes"):
+                st.rerun()
+
+    with ca2:
+        if st.button(f"🔄 Import & Overwrite All ({len(summary_df)} clients)", use_container_width=True,
+                     type="secondary", key="mi_overwrite_btn"):
+            results = _do_import(overwrite_existing=True)
+            _report_result(results)
+            if not st.session_state.get("mi_failed_codes"):
+                st.rerun()
+
+    if st.session_state.get("mi_failed_codes"):
+        st.markdown("---")
+        _n_failed = len(st.session_state["mi_failed_codes"])
+        if st.button(f"🔁 Retry {_n_failed} Failed Client(s) Only", use_container_width=True,
+                     type="primary", key="mi_retry_btn"):
+            results = _do_import(overwrite_existing=False, only_codes=st.session_state["mi_failed_codes"])
+            still_failed = [r["code"] for r in results if not r["status"].startswith(("🆕", "✅"))]
+            st.session_state["mi_failed_codes"] = still_failed
+            _report_result(results)
+            if not still_failed:
+                st.rerun()
+
+
+
+
 # MAIN DASHBOARD
 # =========================================================
 
@@ -15064,6 +15444,17 @@ if _nav_tab == "All Corporate Actions":
   </div>
 </div>
 """, unsafe_allow_html=True)
+
+# =========================================================
+# MASTER IMPORT TAB
+# =========================================================
+if _nav_tab == "Master Import" and _is_dev:
+    show_master_import_tab(
+        clients_dict_ref=clients_dict,
+        save_clients_fn=save_clients,
+        hash_pw_fn=hash_password,
+        dev_code_ref=DEV_CODE,
+    )
 
 # ══════════════════════════════════════════════
 # RESULTS MONITOR TAB
