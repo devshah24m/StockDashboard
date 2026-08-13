@@ -15809,6 +15809,7 @@ if _nav_tab == "Results Monitor":
                 _jj2 = _rsp2.json()
                 _it2 = _jj2 if isinstance(_jj2, list) else _jj2.get("data", [])
                 _raw_dbg["filings_raw_count"] = len(_it2)
+                if _it2: _raw_dbg["sample_record"] = _it2[0]
                 for _x2 in _it2:
                     _sym2 = str(_x2.get("symbol", _x2.get("companyName",""))).strip()
                     # NSE has used different field names for the broadcast/filing date over time — check all known variants
